@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+html[dir="rtl"] body {
+  font-family: "Rubik", "Heebo", "Assistant", system-ui, sans-serif;
+}
+
+/* Subtle table polish */
+.table-row-hover tr:hover td {
+  background: #f1f5f9;
+}

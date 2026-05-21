@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Forklift {
+  id                 String   @id @default(cuid())
+  internalNumber     String   @unique
+  description        String
+  manufacturer       String?
+  model              String?
+  serialNumber       String?
+  year               Int?
+  fuelType           String   @default("ELECTRIC") // ELECTRIC | DIESEL | GASOLINE | LPG | OTHER
+  location           String?
+  department         String?
+  responsiblePerson  String?
+  status             String   @default("ACTIVE") // ACTIVE | INACTIVE | SOLD | UNDER_REPAIR
+  currentHours       Float    @default(0)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  serviceSettings    ServiceSettings?
+  serviceRecords     ServiceRecord[]
+  notifications      Notification[]
+  attachments        Attachment[]
+}
+
+model ServiceSettings {
+  id                          String   @id @default(cuid())
+  forkliftId                  String   @unique
+  trackingMode                String   @default("BOTH") // DATE | HOURS | BOTH
+  dateIntervalMonths          Int?     // e.g. 3, 6, 12
+  hoursInterval               Float?   // e.g. 250, 500, 1000
+  lastServiceDate             DateTime?
+  lastServiceHours            Float?
+  nextServiceDate             DateTime?
+  nextServiceHours            Float?
+  reminderDaysBefore          Int      @default(14)
+  secondReminderDaysBefore    Int?     // optional second reminder
+  repeatOverdueReminderDays   Int?     // optional repeat every N days when overdue
+  hoursReminderThreshold      Float?   // hours-before warning threshold (e.g. 50)
+  remindersEnabled            Boolean  @default(true)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  forklift Forklift @relation(fields: [forkliftId], references: [id], onDelete: Cascade)
+}
+
+model ServiceRecord {
+  id              String   @id @default(cuid())
+  forkliftId      String
+  serviceDate     DateTime
+  serviceHours    Float?
+  serviceType     String   // e.g. "טיפול תקופתי"
+  workDescription String?
+  partsReplaced   String?
+  supplier        String?
+  cost            Float?
+  invoiceNumber   String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  forklift    Forklift     @relation(fields: [forkliftId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  forkliftId  String
+  type        String   // UPCOMING | DUE | OVERDUE
+  title       String
+  message     String
+  dueDate     DateTime?
+  dueHours    Float?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  forklift Forklift @relation(fields: [forkliftId], references: [id], onDelete: Cascade)
+}
+
+model Attachment {
+  id              String   @id @default(cuid())
+  forkliftId      String?
+  serviceRecordId String?
+  filename        String
+  url             String
+  mimeType        String?
+  createdAt       DateTime @default(now())
+
+  forklift      Forklift?      @relation(fields: [forkliftId], references: [id], onDelete: Cascade)
+  serviceRecord ServiceRecord? @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
+}
+
+model AppSettings {
+  id                        String  @id @default("global")
+  defaultReminderDaysBefore Int     @default(14)
+  defaultSecondReminderDays Int?
+  defaultRepeatOverdueDays  Int?
+  dailyCheckTime            String  @default("08:00") // HH:mm
+  remindersEnabled          Boolean @default(true)
+  enableInApp               Boolean @default(true)
+  enableEmail               Boolean @default(false)
+  enablePush                Boolean @default(false)
+  updatedAt                 DateTime @updatedAt @default(now())
+}
