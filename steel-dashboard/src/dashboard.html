@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--@head-->
+<title>לוח ברזל מקצועי</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&family=Rubik:wght@500;600;700&display=swap">
+<style>
+/* Layout: an operations board for a steel service centre. Summary band first, then
+   "what needs action", then the breakdowns; every wide table scrolls inside its own panel. */
+:root {
+  --bg: #eceef1;
+  --surface: #fcfcfc;
+  --surface-2: #f3f5f7;
+  --ink: #121518;
+  --ink-2: #49515a;
+  --muted: #78808a;
+  --hair: #dde1e6;
+  --base: #c2c8cf;
+  --accent: #1d4ed8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6ecfc;
+  --s1: #2a78d6;      /* series 1: galvanized (מגולוון) */
+  --s2: #eb6834;      /* series 2: black (שחור) */
+  --good: #0ca30c;
+  --warn: #fab219;
+  --serious: #ec835a;
+  --crit: #d03b3b;
+  --over: #8a6fd1;
+  --dead: #959ca5;
+  --good-ink: #006300;
+  --crit-ink: #b42323;
+  --tip-bg: #121518;
+  --tip-ink: #f4f6f8;
+  --f-display: "Rubik", "IBM Plex Sans Hebrew", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans Hebrew", "Rubik", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0f12; --surface: #16191d; --surface-2: #1c2025; --ink: #eef1f4; --ink-2: #b6bdc5;
+    --muted: #858d96; --hair: #2a2f35; --base: #3b424a; --accent: #7aa2ff; --accent-ink: #0d0f12;
+    --accent-soft: #1b2641; --s1: #3987e5; --s2: #d95926; --over: #9d8ae6; --dead: #7d858e;
+    --good-ink: #2fbf2f; --crit-ink: #ff7b7b; --tip-bg: #eef1f4; --tip-ink: #121518;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0f12; --surface: #16191d; --surface-2: #1c2025; --ink: #eef1f4; --ink-2: #b6bdc5;
+  --muted: #858d96; --hair: #2a2f35; --base: #3b424a; --accent: #7aa2ff; --accent-ink: #0d0f12;
+  --accent-soft: #1b2641; --s1: #3987e5; --s2: #d95926; --over: #9d8ae6; --dead: #7d858e;
+  --good-ink: #2fbf2f; --crit-ink: #ff7b7b; --tip-bg: #eef1f4; --tip-ink: #121518;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
+.app { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; display: grid; gap: 16px; }
+@media (min-width: 900px) { .app { padding-inline: 24px; } }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.muted { color: var(--muted); }
+.sku { font-family: var(--f-mono); font-size: 12.5px; direction: ltr; unicode-bidi: isolate; }
+.dim { color: var(--muted); }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.brand { display: grid; gap: 4px; min-width: 0; }
+.eyebrow { font-size: 12px; letter-spacing: .04em; color: var(--muted); }
+.brand h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
+.brand h1 svg { width: 30px; height: 30px; color: var(--ink-2); flex: none; }
+.stamps { font-size: 12.5px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.stamps b { font-weight: 500; color: var(--ink); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; cursor: pointer; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg .sw { width: 8px; height: 8px; border-radius: 2px; }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 500; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.linkish { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+
+.notice { border-radius: var(--r); padding: 10px 14px; border: 1px solid var(--hair); background: var(--surface); display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13.5px; }
+.notice.info { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); background: var(--accent-soft); }
+.notice.error { border-color: color-mix(in srgb, var(--crit) 50%, var(--hair)); background: color-mix(in srgb, var(--crit) 8%, var(--surface)); }
+.slots { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.slot { display: inline-flex; gap: 6px; align-items: center; }
+.slot i { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--base); display: inline-grid; place-items: center; font-style: normal; font-size: 11px; }
+.slot.ok i { background: var(--good); border-color: var(--good); color: #fff; }
+
+/* panels */
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); padding: 16px; min-width: 0; display: grid; gap: 14px; align-content: start; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.panel-head p { color: var(--muted); font-size: 13px; }
+.grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1040px) { .grid.two { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); } }
+
+/* KPIs */
+.kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
+.kpi { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.kpi.hero { grid-column: span 2; background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.kpi .lbl { font-size: 12.5px; color: var(--muted); }
+.kpi.hero .lbl, .kpi.hero .sub { color: color-mix(in srgb, var(--surface) 72%, var(--ink)); }
+.kpi .val { font-family: var(--f-display); font-size: 28px; font-weight: 600; line-height: 1.15; }
+.kpi.hero .val { font-size: clamp(40px, 6vw, 54px); font-weight: 700; letter-spacing: -.02em; }
+.kpi .val small { font-size: 14px; font-weight: 500; color: var(--muted); margin-inline-start: 4px; }
+.kpi.hero .val small { color: color-mix(in srgb, var(--surface) 72%, var(--ink)); }
+.kpi .sub { font-size: 12.5px; color: var(--ink-2); }
+@media (max-width: 560px) { .kpi.wide-sm { grid-column: span 2; } }
+.verdict { grid-column: 1 / -1; font-size: 15px; line-height: 1.6; padding: 12px 16px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--hair); }
+.verdict b { font-weight: 600; }
+
+/* tabs */
+.tabs { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.tab { text-align: start; border: 1px solid var(--hair); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; position: relative; }
+.tab[aria-selected="true"] { background: var(--surface); border-color: var(--ink); box-shadow: inset 0 -3px 0 var(--ink); }
+.tab .tn { font-family: var(--f-display); font-size: 24px; font-weight: 600; line-height: 1.1; display: flex; align-items: center; gap: 8px; }
+.tab .tn::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.tab .tt { font-weight: 600; }
+.tab small { color: var(--muted); font-size: 12px; }
+.tab-body { display: grid; gap: 10px; }
+.summary { font-size: 13.5px; color: var(--ink-2); }
+.summary b { color: var(--ink); font-weight: 600; }
+
+/* tables */
+.tbl { display: grid; gap: 8px; min-width: 0; }
+.tbl-scroll { overflow-x: auto; border: 1px solid var(--hair); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { font-weight: 500; color: var(--muted); text-align: start; padding: 0; border-bottom: 1px solid var(--hair); background: var(--surface-2); white-space: nowrap; font-size: 12px; }
+th .th-btn { border: 0; background: none; padding: 8px 10px; cursor: pointer; color: inherit; width: 100%; text-align: inherit; display: inline-flex; gap: 4px; align-items: center; }
+th.n .th-btn { justify-content: flex-end; }
+th[aria-sort] { color: var(--ink); }
+th[aria-sort="descending"] .th-btn::after { content: "▾"; }
+th[aria-sort="ascending"] .th-btn::after { content: "▴"; }
+th.plain { padding: 8px 10px; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--hair); white-space: nowrap; vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+td.wrap { white-space: normal; min-width: 170px; }
+.n { text-align: left; font-variant-numeric: tabular-nums; }
+.neg { color: var(--crit-ink); }
+.more { justify-self: start; border: 1px solid var(--hair); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; color: var(--ink-2); }
+.empty { color: var(--muted); padding: 8px 2px; }
+tr.click { cursor: pointer; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px 1px 8px; border-radius: 999px; font-size: 12px; background: color-mix(in srgb, var(--c) 15%, var(--surface)); color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; }
+.pill.outline { background: transparent; border: 1px solid var(--hair); }
+.pill.outline::before { display: none; }
+.mat { display: inline-flex; align-items: center; gap: 6px; }
+.mat::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+
+/* family glyphs + inline bars */
+.fam { display: inline-flex; align-items: center; gap: 8px; }
+.glyph { width: 18px; height: 18px; color: var(--ink-2); flex: none; }
+.ibar { display: flex; gap: 2px; height: 10px; min-width: 60px; }
+.ibar i { display: block; height: 100%; }
+.ibar i:last-child { border-radius: 4px 0 0 4px; }
+.barcell { display: grid; grid-template-columns: 64px minmax(80px, 1fr); gap: 10px; align-items: center; min-width: 190px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+.legend .ln { width: 16px; height: 2px; background: var(--ink-2); }
+
+/* side lists */
+.stack { display: grid; gap: 12px; }
+.mlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.mlist li { display: grid; gap: 5px; }
+.mrow { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.mrow .name { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.mrow .n { white-space: nowrap; }
+.mline { font-size: 12.5px; color: var(--muted); }
+.share { display: flex; gap: 2px; height: 14px; }
+.share i { display: block; height: 100%; }
+.share i:first-child { border-radius: 0 4px 4px 0; }
+.share i:last-child { border-radius: 4px 0 0 4px; }
+.subhead { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.tag { font-size: 11px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--hair); color: var(--ink-2); }
+
+/* chart */
+.chart { width: 100%; height: auto; display: block; direction: ltr; }
+.chart text { font-family: var(--f-body); font-size: 11px; fill: var(--muted); }
+.chart .val { fill: var(--ink-2); font-weight: 500; }
+.chart .reflbl { fill: var(--ink-2); }
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--tip-bg); color: var(--tip-ink); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; max-width: 260px; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.tip b { font-weight: 600; }
+.tip .row { display: flex; justify-content: space-between; gap: 14px; }
+.tip .row span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.tip .sw { width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+
+/* explorer */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--hair); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; cursor: pointer; display: grid; gap: 0; text-align: start; min-width: 110px; }
+.chip[aria-pressed="true"] { border-color: var(--ink); background: var(--surface); box-shadow: inset 0 -2px 0 var(--ink); }
+.chip .cl { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; }
+.chip .cl::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.chip.all .cl::before { display: none; }
+.chip small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.filters input, .filters select { border: 1px solid var(--hair); background: var(--surface); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.filters input { flex: 1 1 220px; max-width: 360px; }
+.filters .count { color: var(--muted); font-size: 12.5px; }
+
+/* quality */
+.qlist { display: grid; gap: 8px; }
+details.q { border: 1px solid var(--hair); border-radius: 8px; background: var(--surface); }
+details.q summary { cursor: pointer; padding: 10px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; align-items: baseline; list-style: none; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary .qn { font-family: var(--f-display); font-weight: 600; font-size: 18px; grid-row: span 2; min-width: 64px; display: inline-flex; align-items: center; gap: 8px; }
+details.q summary .qn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+details.q summary .qt { font-weight: 500; }
+details.q summary .qw { color: var(--muted); font-size: 12.5px; }
+details.q[open] summary { border-bottom: 1px solid var(--hair); }
+details.q .qbody { padding: 10px 12px; display: grid; gap: 8px; }
+
+/* method */
+.method { font-size: 13px; color: var(--ink-2); display: grid; gap: 6px; }
+.method dl { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+.method dt { font-weight: 600; color: var(--ink); }
+.method dd { margin: 0; }
+@media (max-width: 560px) { .method dl { grid-template-columns: minmax(0, 1fr); } .method dd { margin-bottom: 6px; } }
+
+/* empty state */
+.drop { border: 2px dashed var(--base); border-radius: var(--r); padding: 28px 20px; display: grid; gap: 14px; justify-items: start; background: var(--surface); }
+.drop ol { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
+.dragging .drop, body.dragging .app { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--r); }
+</style>
+<!--@/head-->
+</head>
+<body>
+<!--@body-->
+<div class="app" dir="rtl" lang="he" id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="eyebrow">זינומטל · מלאי ורכש</div>
+      <h1><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3h18v3.5H13.5v11H21V21H3v-3.5h7.5v-11H3z"/></svg>ברזל מקצועי</h1>
+      <div class="stamps" id="stamps"></div>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="סינון לפי חומר" id="matseg"></div>
+      <button type="button" class="btn ghost" id="load-btn">טעינת קבצים מפריוריטי</button>
+      <input type="file" id="file-input" multiple accept=".xls,.txt,.tsv,.csv,text/plain" hidden>
+    </div>
+  </header>
+  <div id="notice"></div>
+  <main id="main" class="app" style="padding:0"></main>
+</div>
+<div class="tip" id="tip" dir="rtl" hidden></div>
+<script src="model.js"></script>
+<script id="snapshot" type="application/json">null</script>
+<script>
+(function () {
+  "use strict";
+  var M = window.SteelModel;
+  var STORE = "steel-dashboard:v1:";
+
+  var MAT_ORDER = ["MEG", "BLA"]; // fixed series order: slot 1 galvanized, slot 2 black
+  var MAT = { MEG: "מגולוון", BLA: "שחור", GAL: "גלוון מראש" };
+  var MAT_C = { MEG: "var(--s1)", BLA: "var(--s2)", GAL: "var(--dead)" };
+  var BUCKET = {
+    out: { label: "אזל", long: "אזל, יש צריכה", c: "var(--crit)", rank: 0 },
+    critical: { label: "קריטי", long: "פחות מחודש", c: "var(--serious)", rank: 1 },
+    low: { label: "נמוך", long: "1 עד 3 חודשים", c: "var(--warn)", rank: 2 },
+    ok: { label: "תקין", long: "3 עד 12 חודשים", c: "var(--good)", rank: 3 },
+    over: { label: "עודף", long: "מעל 12 חודשים", c: "var(--over)", rank: 4 },
+    dead: { label: "ללא תנועה", long: "מלאי בלי צריכה", c: "var(--dead)", rank: 5 },
+    idle: { label: "לא פעיל", long: "בלי מלאי ובלי צריכה", c: "var(--dead)", rank: 6 },
+  };
+  var KIND = {
+    parts: "פריטים (parts)",
+    stock: "מלאי ותמחור (MlyTimhur3)",
+    orders: "הזמנות ספק פתוחות (OpnOrdSup)",
+  };
+  var HE_MONTHS = ["ינו׳", "פבר׳", "מרץ", "אפר׳", "מאי", "יוני", "יולי", "אוג׳", "ספט׳", "אוק׳", "נוב׳", "דצמ׳"];
+  var DOT = '<span class="dim">·</span>';
+
+  // ---------- storage (per-viewer convenience only) ----------
+  function save(k, v) { try { localStorage.setItem(STORE + k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  function load(k) { try { var v = localStorage.getItem(STORE + k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+  function drop(k) { try { localStorage.removeItem(STORE + k); } catch (e) {} }
+
+  // ---------- formatting ----------
+  var nf0 = new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 });
+  var nf1 = new Intl.NumberFormat("he-IL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var nf2 = new Intl.NumberFormat("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var pct = new Intl.NumberFormat("he-IL", { style: "percent", maximumFractionDigits: 0 });
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function kg(n) { return nf0.format(Math.round(n)); }
+  function kgCell(n) { return '<span class="' + (n < -0.5 ? "neg" : "") + '">' + kg(n) + "</span>"; }
+  function tons(nKg) { var t = nKg / 1000; return Math.abs(t) >= 100 ? nf0.format(t) : nf1.format(t); }
+  function money(n, sym) {
+    var a = Math.abs(n), s;
+    if (a >= 1e6) s = nf2.format(a / 1e6) + "M";
+    else if (a >= 1e4) s = nf0.format(a / 1e3) + "K";
+    else s = nf0.format(a);
+    return '<span class="ltr' + (n < -0.5 ? " neg" : "") + '">' + (n < -0.5 ? "-" : "") + sym + s + "</span>";
+  }
+  function months(m) { if (m == null) return DOT; if (m > 99) return "99+"; return nf1.format(Math.max(m, 0)); }
+  function dmy(iso) { if (!iso) return ""; var p = iso.split("-"); return p[2] + "/" + p[1] + "/" + p[0].slice(2); }
+  function monthLabel(key) { var p = key.split("-"); return HE_MONTHS[+p[1] - 1] + " " + p[0].slice(2); }
+  function covColor(m) {
+    if (m == null) return "var(--dead)";
+    if (m <= 0) return "var(--crit)";
+    if (m < 1) return "var(--serious)";
+    if (m < 3) return "var(--warn)";
+    if (m <= 12) return "var(--good)";
+    return "var(--over)";
+  }
+  function covPill(m, stockKg) {
+    if (m == null) return DOT;
+    if (stockKg != null && stockKg <= 0.5) return '<span class="pill" style="--c:var(--crit)">אזל</span>';
+    return '<span class="pill" style="--c:' + covColor(m) + '">' + months(m) + "</span>";
+  }
+  function bucketPill(b) { var x = BUCKET[b]; return '<span class="pill" style="--c:' + x.c + '">' + x.label + "</span>"; }
+  function matTag(m) { return '<span class="mat" style="--c:' + (MAT_C[m] || "var(--dead)") + '">' + esc(MAT[m] || m || "לא ידוע") + "</span>"; }
+  function etaCell(iso, late) {
+    if (!iso) return DOT;
+    return late ? '<span class="pill" style="--c:var(--crit)">' + dmy(iso) + " באיחור</span>" : dmy(iso);
+  }
+
+  // Cross-section glyphs: the profile shape of each family
+  var GLYPH = {
+    wide: '<rect x="2" y="2" width="14" height="2.6"/><rect x="2" y="13.4" width="14" height="2.6"/><rect x="8" y="4" width="2" height="10"/>',
+    narrow: '<rect x="4" y="2" width="10" height="2.4"/><rect x="4" y="13.6" width="10" height="2.4"/><rect x="8.1" y="4" width="1.8" height="10"/>',
+    channel: '<rect x="4" y="2" width="10" height="2.4"/><rect x="4" y="13.6" width="10" height="2.4"/><rect x="11.6" y="2" width="2.4" height="14"/>',
+    angle: '<rect x="12.6" y="2" width="2.4" height="14"/><rect x="3" y="13.6" width="12" height="2.4"/>',
+    flat: '<rect x="2" y="7" width="14" height="4" rx=".5"/>',
+    round: '<circle cx="9" cy="9" r="6"/>',
+    square: '<rect x="3.5" y="3.5" width="11" height="11"/>',
+    shaft: '<circle cx="9" cy="9" r="6.5"/><rect x="8" y="2" width="2" height="3" style="fill:var(--surface)"/>',
+    tee: '<rect x="2" y="2" width="14" height="2.6"/><rect x="7.9" y="4" width="2.2" height="12"/>',
+    other: '<rect x="3" y="3" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>',
+  };
+  var FAMILY_GLYPH = {
+    HEA: "wide", HEB: "wide", IPE: "narrow", IPN: "narrow", IPL: "narrow", UPN: "channel", UPE: "channel",
+    "זוית מקצועי": "angle", "זוית": "angle", "שטוח": "flat", "עגול": "round", "מרובע": "square",
+    "טרנסמיסיה": "shaft", Tbar: "tee",
+  };
+  function glyph(family) {
+    return '<svg class="glyph" viewBox="0 0 18 18" aria-hidden="true" style="fill:currentColor">' + GLYPH[FAMILY_GLYPH[family] || "other"] + "</svg>";
+  }
+  function famCell(f) { return '<span class="fam">' + glyph(f) + esc(f) + "</span>"; }
+
+  // ---------- state ----------
+  var embedded = null;
+  try { embedded = JSON.parse(document.getElementById("snapshot").textContent); } catch (e) { embedded = null; }
+  var state = {
+    snap: null, source: null, loadedAt: null, d: null,
+    material: load("material") || "all",
+    tab: load("tab") || "reorder",
+    bucket: null, family: "", q: "",
+    pending: {}, notice: null, poOpen: {}, sorts: {}, limits: {},
+  };
+  var tables = {};
+
+  function runKey(s) {
+    var r = (s && s.meta && s.meta.stockRun) || "";
+    return (M.isoDate(r) || "") + " " + (r.split(" ")[1] || "");
+  }
+  function pickSource() {
+    var up = load("upload");
+    if (up && up.snap && up.snap.version === 1 && (!embedded || runKey(up.snap) >= runKey(embedded))) {
+      state.snap = up.snap; state.source = "upload"; state.loadedAt = up.loadedAt;
+    } else {
+      state.snap = embedded; state.source = embedded ? "embedded" : null; state.loadedAt = null;
+    }
+  }
+
+  // ---------- generic sortable table ----------
+  function defineTable(id, cols, rows, opt) {
+    tables[id] = { cols: cols, rows: rows, opt: opt || {} };
+    return renderTable(id);
+  }
+  function cellClass(c) {
+    var cls = [];
+    if (c.num) cls.push("n");
+    if (c.cls) cls.push(c.cls);
+    return cls.length ? ' class="' + cls.join(" ") + '"' : "";
+  }
+  function renderTable(id) {
+    var t = tables[id], o = t.opt;
+    var s = state.sorts[id] || o.sort || null;
+    var rows = t.rows.slice();
+    if (s) {
+      var col = t.cols.filter(function (c) { return c.key === s.key; })[0];
+      var get = col.sort || function (r) { return r[col.key]; };
+      rows.sort(function (a, b) {
+        var x = get(a), y = get(b);
+        if (x == null && y == null) return 0;
+        if (x == null) return 1;
+        if (y == null) return -1;
+        return (x < y ? -1 : x > y ? 1 : 0) * s.dir;
+      });
+    }
+    var limit = state.limits[id] || o.limit || 25;
+    var head = t.cols.map(function (c) {
+      var sorted = s && s.key === c.key ? ' aria-sort="' + (s.dir > 0 ? "ascending" : "descending") + '"' : "";
+      return "<th scope=\"col\"" + cellClass(c) + ' data-sort="' + c.key + '"' + sorted + '><button type="button" class="th-btn">' + c.label + "</button></th>";
+    }).join("");
+    var body = rows.slice(0, limit).map(function (r) {
+      return "<tr>" + t.cols.map(function (c) { return "<td" + cellClass(c) + ">" + c.fmt(r) + "</td>"; }).join("") + "</tr>";
+    }).join("");
+    var more = rows.length > limit ? '<button type="button" class="more" data-more="' + id + '">הצגת כל ' + nf0.format(rows.length) + " השורות</button>" : "";
+    var empty = rows.length ? "" : '<p class="empty">' + (o.empty || "אין שורות להצגה") + "</p>";
+    return '<div class="tbl" data-table="' + id + '">' +
+      (rows.length ? '<div class="tbl-scroll"><table><thead><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table></div>" : "") +
+      empty + more + "</div>";
+  }
+  function repaintTable(id) {
+    var el = document.querySelector('[data-table="' + id + '"]');
+    if (el) el.outerHTML = renderTable(id);
+  }
+
+  var C = {
+    sku: { key: "sku", label: "מק״ט", fmt: function (r) { return '<span class="sku">' + esc(r.sku) + "</span>"; } },
+    desc: { key: "desc", label: "תיאור", cls: "wrap", fmt: function (r) { return esc(r.desc); } },
+    family: { key: "family", label: "משפחה", fmt: function (r) { return famCell(r.family); } },
+    material: { key: "material", label: "חומר", fmt: function (r) { return matTag(r.material); } },
+    stock: { key: "stockKg", label: "מלאי ק״ג", num: true, fmt: function (r) { return kgCell(r.stockKg); } },
+    cons: { key: "cons", label: "צריכה לחודש ק״ג", num: true, fmt: function (r) { return r.cons > 0 ? kg(r.cons) : DOT; } },
+    cov: { key: "coverage", label: "חודשי מלאי", num: true, fmt: function (r) { return covPill(r.coverage, r.stockKg); } },
+    onOrder: { key: "onOrderKg", label: "בדרך ק״ג", num: true, fmt: function (r) { return r.onOrderKg > 0 ? kg(r.onOrderKg) : DOT; } },
+    pipe: { key: "pipeCoverage", label: "כיסוי כולל בדרך", num: true, fmt: function (r) { return months(r.pipeCoverage); } },
+    eta: { key: "nextEta", label: "הגעה קרובה", fmt: function (r) { return etaCell(r.nextEta, r.lateKg > 0); } },
+    toEta: { key: "monthsToEta", label: "חודשים עד הגעה", num: true, fmt: function (r) { return months(r.monthsToEta); } },
+    value: { key: "valueIls", label: "ערך מלאי", num: true, fmt: function (r) { return money(r.valueIls, "₪"); } },
+    cost: { key: "avgCost", label: "עלות ₪ לק״ג", num: true, fmt: function (r) { return r.avgCost ? nf2.format(r.avgCost) : DOT; } },
+    list: { key: "priceList", label: "מחירון ₪ לק״ג", num: true, fmt: function (r) { return r.priceList ? nf2.format(r.priceList) : DOT; } },
+    min: { key: "minInv", label: "מינימום ק״ג", num: true, fmt: function (r) { return r.minInv ? kg(r.minInv) : DOT; } },
+    state: { key: "bucket", label: "מצב", fmt: function (r) { return bucketPill(r.bucket); }, sort: function (r) { return BUCKET[r.bucket].rank; } },
+    need: { key: "coverNeedKg", label: "חסר לכיסוי זמן אספקה ק״ג", num: true, fmt: function (r) { return kg(r.coverNeedKg); } },
+    gap: { key: "gapKg", label: "חוסר צפוי עד ההגעה ק״ג", num: true, fmt: function (r) { return '<b>' + kg(r.gapKg) + "</b>"; } },
+    orderUsd: { key: "onOrderUsd", label: "שווי בדרך", num: true, fmt: function (r) { return money(r.onOrderUsd, "$"); } },
+  };
+
+  // ---------- sections ----------
+  function renderStamps() {
+    var el = document.getElementById("stamps");
+    if (!state.snap) { el.innerHTML = '<span>ממתין לקבצי פריוריטי</span>'; return; }
+    var m = state.snap.meta;
+    var src = state.source === "upload"
+      ? '<span>מקור: קבצים שנטענו בדפדפן הזה ' + esc(new Date(state.loadedAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" })) + ' · <button type="button" class="linkish" data-reset>חזרה לנתוני הדוח</button></span>'
+      : "";
+    el.innerHTML = "<span>מלאי <b>" + esc(m.stockRun) + "</b></span><span>הזמנות ספק <b>" + esc(m.ordersRun) + "</b></span><span>כרטיסי פריט <b>" + esc(m.partsRun) + "</b></span>" + src;
+  }
+
+  function renderMatSeg() {
+    var opts = [["all", "הכל", null], ["BLA", "שחור", MAT_C.BLA], ["MEG", "מגולוון", MAT_C.MEG]];
+    document.getElementById("matseg").innerHTML = opts.map(function (o) {
+      return '<button type="button" data-mat="' + o[0] + '" aria-pressed="' + (state.material === o[0]) + '">' +
+        (o[2] ? '<span class="sw" style="background:' + o[2] + '"></span>' : "") + o[1] + "</button>";
+    }).join("");
+  }
+
+  function renderNotice() {
+    var el = document.getElementById("notice");
+    var n = state.notice;
+    var pend = Object.keys(state.pending);
+    if (!n && !pend.length) { el.innerHTML = ""; return; }
+    var slots = pend.length ? '<span class="slots">' + Object.keys(KIND).map(function (k) {
+      return '<span class="slot' + (state.pending[k] ? " ok" : "") + '"><i>' + (state.pending[k] ? "✓" : "") + "</i>" + KIND[k] + "</span>";
+    }).join("") + "</span>" : "";
+    el.innerHTML = '<div class="notice ' + ((n && n.type) || "info") + '" role="status">' + (n ? "<span>" + n.html + "</span>" : "") + slots + "</div>";
+  }
+
+  function emptyState() {
+    return '<section class="drop"><h2>טעינת נתונים</h2>' +
+      "<p>הלוח מחשב מלאי, צריכה, כיסוי והזמנות ספק לפריטי ברזל מקצועי. ייצאו מפריוריטי את שלושת הדוחות (קובץ טקסט מופרד בטאבים, כמו שהמערכת שומרת כ־xls) וגררו אותם לכאן, או בחרו אותם:</p>" +
+      "<ol><li><b>" + KIND.parts + "</b>: כרטיסי פריט כולל טיפוס משפחה ו־Min_Inventory</li><li><b>" + KIND.stock + "</b>: יתרות לפי מחסן ואיתור, ערך וצריכה חודשית</li><li><b>" + KIND.orders + "</b>: יתרות לאספקה, תאריכים, אוניות ומחירים</li></ol>" +
+      '<button type="button" class="btn" data-load>בחירת קבצים</button>' +
+      '<p class="muted">הקבצים נקראים רק בדפדפן שלכם. שום נתון לא נשלח לשרת.</p></section>';
+  }
+
+  function kpis(d) {
+    var T = d.totals;
+    var poCount = d.pos.filter(function (p) { return !p.draft; }).length;
+    var a = d.actions;
+    var reorderCons = a.reorder.reduce(function (s, x) { return s + x.cons; }, 0);
+    var overKg = a.overOrdered.reduce(function (s, x) { return s + x.onOrderKg; }, 0);
+    var deadVal = a.dead.reduce(function (s, x) { return s + x.valueIls; }, 0);
+    var verdict = "המלאי מכסה <b>" + months(T.coverage) + " חודשי צריכה</b>, ועם ההזמנות הפתוחות <b>" + months(T.pipeCoverage) + " חודשים</b>.";
+    if (a.reorder.length) {
+      verdict += " למרות זאת, <b>" + nf0.format(a.reorder.length) + " מק״טים</b> פעילים (צריכה של " + tons(reorderCons) + " ט׳ בחודש) לא מכוסים לזמן אספקה של " + nf1.format(d.leadTime) + " חודשים";
+      verdict += a.overOrdered.length
+        ? ", ובאותו זמן <b>" + nf0.format(a.overOrdered.length) + " מק״טים</b> עם יותר משנת מלאי עדיין בהזמנה (" + tons(overKg) + " ט׳)."
+        : ".";
+    } else if (a.overOrdered.length) {
+      verdict += " <b>" + nf0.format(a.overOrdered.length) + " מק״טים</b> עם יותר משנת מלאי עדיין בהזמנה (" + tons(overKg) + " ט׳).";
+    }
+    if (a.dead.length) verdict += " " + nf0.format(a.dead.length) + " מק״טים בלי תנועה מחזיקים " + money(deadVal, "₪") + ".";
+    return '<section class="kpis" aria-label="מדדים מרכזיים">' +
+      '<div class="kpi hero"><div class="lbl">מלאי נטו</div><div class="val">' + tons(T.stockKg) + "<small>טון</small></div>" +
+      '<div class="sub">' + money(T.valueIls, "₪") + " בעלות · ממוצע " + (T.avgCost ? nf2.format(T.avgCost) : "") + " ₪ לק״ג</div></div>" +
+      '<div class="kpi"><div class="lbl">צריכה חודשית ממוצעת</div><div class="val">' + tons(T.consKg) + "<small>טון</small></div><div class=\"sub\">ממוצע יציאות בפריוריטי</div></div>" +
+      '<div class="kpi"><div class="lbl">חודשי מלאי</div><div class="val">' + months(T.coverage) + '</div><div class="sub">מלאי חלקי צריכה חודשית</div></div>' +
+      '<div class="kpi"><div class="lbl">בדרך מספקים</div><div class="val">' + tons(T.onOrderKg) + "<small>טון</small></div><div class=\"sub\">" + money(T.onOrderUsd, "$") + " · " + poCount + " הזמנות" + (T.draftKg > 0 ? " · עוד " + tons(T.draftKg) + " ט׳ בטיוטה" : "") + "</div></div>" +
+      '<div class="kpi"><div class="lbl">כיסוי כולל בדרך</div><div class="val">' + months(T.pipeCoverage) + '<small>חודשים</small></div><div class="sub">מלאי ובדרך, חלקי צריכה</div></div>' +
+      '<div class="kpi wide-sm"><div class="lbl">זמן אספקה מיבוא</div><div class="val">' + nf1.format(d.leadTime) + '<small>חודשים</small></div><div class="sub">חציון של ' + d.leadTimes.length + " הזמנות, מהזמנה להגעה</div></div>" +
+      '<p class="verdict">' + verdict + "</p></section>";
+  }
+
+  function attention(d) {
+    var a = d.actions;
+    var L = nf1.format(d.leadTime);
+    var tabs = [
+      { id: "reorder", n: a.reorder.length, t: "להזמין", s: "מלאי ובדרך מכסים פחות מ־" + L + " חודשים", c: "var(--serious)" },
+      { id: "gap", n: a.gap.length, t: "ייגמר לפני ההגעה", s: "המלאי לא יחזיק עד שההזמנה תגיע", c: "var(--crit)" },
+      { id: "overOrdered", n: a.overOrdered.length, t: "הזמנות על עודף", s: "מעל " + d.overstockMonths + " חודשי מלאי ועדיין בהזמנה", c: "var(--over)" },
+      { id: "dead", n: a.dead.length, t: "ללא תנועה", s: "יש מלאי, אין צריכה", c: "var(--dead)" },
+    ];
+    if (!tabs.some(function (t) { return t.id === state.tab; })) state.tab = "reorder";
+    var head = '<div class="tabs" role="tablist" aria-label="רשימות פעולה">' + tabs.map(function (t) {
+      return '<button type="button" class="tab" role="tab" id="tab-' + t.id + '" aria-controls="tabpanel" aria-selected="' + (state.tab === t.id) + '" data-tab="' + t.id + '" style="--c:' + t.c + '">' +
+        '<span class="tn">' + nf0.format(t.n) + '</span><span class="tt">' + t.t + "</span><small>" + t.s + "</small></button>";
+    }).join("") + "</div>";
+    return '<section class="panel" id="attention"><div class="panel-head"><h2>דורש טיפול</h2><p>רשימות לפי צריכה חודשית ותאריכי הגעה. לחיצה על כותרת עמודה ממיינת.</p></div>' +
+      head + '<div class="tab-body" id="tabpanel" role="tabpanel" aria-labelledby="tab-' + state.tab + '">' + tabBody(d, state.tab) + "</div></section>";
+  }
+
+  function tabBody(d, id) {
+    var a = d.actions, L = nf1.format(d.leadTime), xs, sum;
+    function total(list, f) { return list.reduce(function (s, x) { return s + f(x); }, 0); }
+    if (id === "reorder") {
+      xs = a.reorder;
+      sum = "<b>" + nf0.format(xs.length) + " מק״טים</b> פעילים עם צריכה של <b>" + tons(total(xs, function (x) { return x.cons; })) + " ט׳ בחודש</b>. " +
+        "כדי לכסות " + L + " חודשים חסרים בערך <b>" + tons(total(xs, function (x) { return x.coverNeedKg; })) + " ט׳</b>. " +
+        '<span class="muted">החישוב: צריכה חודשית כפול זמן אספקה, פחות מלאי ובדרך. לא כולל מלאי ביטחון.</span>';
+      return '<p class="summary">' + sum + "</p>" + defineTable("reorder",
+        [C.sku, C.desc, C.material, C.cons, C.stock, C.onOrder, C.eta, C.pipe, C.need], xs,
+        { sort: { key: "cons", dir: -1 }, limit: 20, empty: "אין פריטים שהכיסוי שלהם קצר מזמן האספקה." });
+    }
+    if (id === "gap") {
+      xs = a.gap;
+      sum = "<b>" + nf0.format(xs.length) + " מק״טים</b> יש להם הזמנה פתוחה, אבל המלאי צפוי להיגמר לפניה. חוסר מצטבר עד ההגעה: <b>" + tons(total(xs, function (x) { return x.gapKg; })) + " ט׳</b>. " +
+        '<span class="muted">שווה לבדוק הקדמת משלוח, רכש מקומי משלים, או החלפה באורך אחר של אותו פרופיל.</span>';
+      return '<p class="summary">' + sum + "</p>" + defineTable("gap",
+        [C.sku, C.desc, C.stock, C.cons, C.cov, C.eta, C.toEta, C.gap], xs,
+        { sort: { key: "gapKg", dir: -1 }, limit: 20, empty: "אין פריטים שצפויים להיגמר לפני ההגעה." });
+    }
+    if (id === "overOrdered") {
+      xs = a.overOrdered;
+      sum = "<b>" + nf0.format(xs.length) + " מק״טים</b> עם יותר מ־" + d.overstockMonths + " חודשי מלאי (או בלי צריכה בכלל) ועדיין בהזמנה פתוחה: <b>" +
+        tons(total(xs, function (x) { return x.onOrderKg; })) + " ט׳</b> בשווי " + money(total(xs, function (x) { return x.onOrderUsd; }), "$") + ". " +
+        '<span class="muted">מועמדים לדחייה, הקטנה או המרה למידות חסרות מול הספק, כל עוד לא הועמסו.</span>';
+      return '<p class="summary">' + sum + "</p>" + defineTable("overOrdered",
+        [C.sku, C.desc, C.stock, C.cons, C.cov, C.onOrder, C.eta, C.pipe, C.orderUsd], xs,
+        { sort: { key: "onOrderKg", dir: -1 }, limit: 20, empty: "אין הזמנות פתוחות על פריטים בעודף." });
+    }
+    xs = a.dead;
+    sum = "<b>" + nf0.format(xs.length) + " מק״טים</b> עם מלאי ובלי צריכה: <b>" + tons(total(xs, function (x) { return x.stockKg; })) + " ט׳</b> בערך " +
+      money(total(xs, function (x) { return x.valueIls; }), "₪") + ". " +
+      '<span class="muted">חלקם עשויים להיות מלאי לפרויקט או פריט חדש. כל השאר הם הון שעומד.</span>';
+    return '<p class="summary">' + sum + "</p>" + defineTable("dead",
+      [C.sku, C.desc, C.family, C.material, C.stock, C.cost, C.value], xs,
+      { sort: { key: "valueIls", dir: -1 }, limit: 20, empty: "אין פריטים ללא תנועה." });
+  }
+
+  function matBar(byMaterial, scale, widthPct) {
+    var segs = MAT_ORDER.filter(function (m) { return (byMaterial[m] || 0) > 0; });
+    if (!segs.length) return '<div class="ibar"></div>';
+    return '<div class="ibar" style="width:' + Math.max(widthPct, 1.5) + '%">' + segs.map(function (m) {
+      return '<i style="flex:' + byMaterial[m] / scale + ';background:' + MAT_C[m] + '"></i>';
+    }).join("") + "</div>";
+  }
+
+  function overview(d) {
+    var maxStock = Math.max.apply(null, d.families.map(function (f) { return Math.max(f.stockKg, 0); }).concat([1]));
+    var rows = d.families.map(function (f) {
+      var by = {};
+      MAT_ORDER.forEach(function (m) { by[m] = Math.max(f.byMaterial[m] || 0, 0); });
+      return '<tr class="click" data-family="' + esc(f.family) + '" tabindex="0" title="הצגת הפריטים של ' + esc(f.family) + '">' +
+        "<td>" + famCell(f.family) + "</td>" +
+        '<td class="n">' + nf0.format(f.skus) + "</td>" +
+        '<td><div class="barcell"><span class="n">' + tons(f.stockKg) + "</span>" + matBar(by, Math.max(f.stockKg, 1), Math.max(f.stockKg, 0) / maxStock * 100) + "</div></td>" +
+        '<td class="n">' + tons(f.consKg) + "</td>" +
+        '<td class="n">' + covPill(f.coverage) + "</td>" +
+        '<td class="n">' + (f.onOrderKg > 0 ? tons(f.onOrderKg) : DOT) + "</td>" +
+        '<td class="n">' + months(f.pipeCoverage) + "</td>" +
+        '<td class="n">' + (f.listMargin == null ? DOT : pct.format(f.listMargin)) + "</td></tr>";
+    }).join("");
+    var famTable = '<div class="tbl-scroll"><table><thead><tr>' +
+      '<th class="plain">משפחה</th><th class="plain n">מק״טים</th><th class="plain">מלאי ט׳</th><th class="plain n">צריכה ט׳ לחודש</th><th class="plain n">חודשי מלאי</th><th class="plain n">בדרך ט׳</th><th class="plain n">כיסוי כולל</th><th class="plain n">מרווח מחירון</th>' +
+      "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+    var legend = '<div class="legend">' + MAT_ORDER.map(function (m) { return '<span><i class="sw" style="--c:' + MAT_C[m] + '"></i>' + MAT[m] + "</span>"; }).join("") + "</div>";
+
+    // material split
+    var totalPos = d.materials.reduce(function (s, m) { return s + Math.max(m.stockKg, 0); }, 0) || 1;
+    var mats = MAT_ORDER.map(function (k) { return d.materials.filter(function (m) { return m.material === k; })[0]; }).filter(Boolean);
+    var share = '<div class="share" role="img" aria-label="חלוקת המלאי לפי חומר">' + mats.map(function (m) {
+      return '<i style="flex:' + Math.max(m.stockKg, 0) / totalPos + ";background:" + MAT_C[m.material] + '"></i>';
+    }).join("") + "</div>";
+    var matList = '<ul class="mlist">' + mats.map(function (m) {
+      return '<li><div class="mrow"><span class="name">' + matTag(m.material) + '</span><span class="n"><b>' + tons(m.stockKg) + "</b> ט׳ · " + pct.format(Math.max(m.stockKg, 0) / totalPos) + "</span></div>" +
+        '<div class="mline">' + money(m.valueIls, "₪") + " · צריכה " + tons(m.consKg) + " ט׳ לחודש · " + months(m.consKg ? m.stockKg / m.consKg : null) + " חודשי מלאי · בדרך " + tons(m.onOrderKg) + " ט׳</div></li>";
+    }).join("") + "</ul>";
+
+    var maxWh = Math.max.apply(null, d.warehouses.map(function (w) { return w.kg; }).concat([1]));
+    var wh = '<ul class="mlist">' + d.warehouses.filter(function (w) { return Math.abs(w.kg) > 0.5; }).map(function (w) {
+      return '<li><div class="mrow"><span class="name">' + (w.wh === "Main" ? "מחסן ראשי" : "מחסן " + esc(w.wh)) + ' <span class="sku dim">' + esc(w.wh) + '</span></span><span class="n">' + tons(w.kg) + " ט׳</span></div>" +
+        '<div class="ibar" style="width:' + Math.max(w.kg / maxWh * 100, 1) + '%"><i style="flex:1;background:var(--ink-2)"></i></div></li>';
+    }).join("") + "</ul>";
+
+    return '<div class="grid two">' +
+      '<section class="panel"><div class="panel-head"><h2>לפי משפחת פרופיל</h2><p>לחיצה על שורה מסננת את רשימת הפריטים</p></div>' + legend + famTable + "</section>" +
+      '<div class="stack"><section class="panel"><div class="panel-head"><h2>שחור מול מגולוון</h2></div>' + share + matList + "</section>" +
+      '<section class="panel"><div class="panel-head"><h2>לפי מחסן</h2><p>' + pct.format(d.quality.unlocatedShare) + " מהמלאי בלי איתור</p></div>" + wh + "</section></div></div>";
+  }
+
+  // ---------- arrivals chart ----------
+  function niceStep(max, count) {
+    var raw = max / count, p = Math.pow(10, Math.floor(Math.log10(raw)));
+    var steps = [1, 2, 2.5, 5, 10];
+    for (var i = 0; i < steps.length; i++) if (raw <= steps[i] * p) return steps[i] * p;
+    return 10 * p;
+  }
+  function arrivalCats(d) {
+    var map = {};
+    d.arrivals.forEach(function (a) { map[a.key] = a; });
+    var cats = [];
+    if (map.late) cats.push({ key: "late", label: "באיחור", a: map.late });
+    var keys = d.arrivals.map(function (a) { return a.key; }).filter(function (k) { return /^\d{4}-\d{2}$/.test(k); }).sort();
+    if (keys.length) {
+      var start = d.refDate.slice(0, 7) < keys[0] ? d.refDate.slice(0, 7) : keys[0];
+      var end = keys[keys.length - 1];
+      var y = +start.slice(0, 4), m = +start.slice(5, 7);
+      for (var guard = 0; guard < 36; guard++) {
+        var k = y + "-" + (m < 10 ? "0" + m : m);
+        cats.push({ key: k, label: monthLabel(k), a: map[k] || { kg: 0, usd: 0, byMaterial: {}, poCount: 0 } });
+        if (k >= end) break;
+        m++; if (m > 12) { m = 1; y++; }
+      }
+    }
+    if (map.none) cats.push({ key: "none", label: "ללא תאריך", a: map.none });
+    return cats;
+  }
+  function arrivalsChart(d) {
+    var cats = arrivalCats(d);
+    if (!cats.length) return '<p class="empty">אין הזמנות פתוחות.</p>';
+    var consT = d.totals.consKg / 1000;
+    var W = 640, H = 270, mt = 26, mb = 34, ml = 8, mr = 46;
+    var pw = W - ml - mr, ph = H - mt - mb, base = mt + ph;
+    var maxT = Math.max(consT, Math.max.apply(null, cats.map(function (c) { return c.a.kg / 1000; })));
+    var step = niceStep(maxT, 4), top = Math.ceil(maxT / step) * step || 1;
+    var y = function (t) { return base - t / top * ph; };
+    var band = pw / cats.length, bw = Math.min(30, band * 0.5);
+    var out = [];
+    for (var t = 0; t <= top + 1e-9; t += step) {
+      out.push('<line x1="' + ml + '" x2="' + (ml + pw) + '" y1="' + y(t) + '" y2="' + y(t) + '" style="stroke:' + (t === 0 ? "var(--base)" : "var(--hair)") + ';stroke-width:1"/>');
+      out.push('<text x="' + (ml + pw + 8) + '" y="' + (y(t) + 4) + '" text-anchor="start">' + nf0.format(t) + "</text>");
+    }
+    cats.forEach(function (c, i) {
+      var cx = ml + pw - (i + 0.5) * band; // right to left, like the page
+      var segs = MAT_ORDER.filter(function (m) { return (c.a.byMaterial[m] || 0) > 0; });
+      var acc = 0;
+      segs.forEach(function (m, j) {
+        var v = c.a.byMaterial[m] / 1000;
+        var y0 = y(acc), y1 = y(acc + v);
+        if (j > 0) y0 -= 2; // 2px surface gap between stacked segments
+        acc += v;
+        var h = Math.max(y0 - y1, 0.5), x0 = cx - bw / 2;
+        var fill = 'style="fill:' + MAT_C[m] + '"';
+        if (j === segs.length - 1 && h > 4) {
+          out.push('<path ' + fill + ' d="M' + x0 + "," + y0 + "V" + (y1 + 4) + "Q" + x0 + "," + y1 + " " + (x0 + 4) + "," + y1 + "H" + (x0 + bw - 4) + "Q" + (x0 + bw) + "," + y1 + " " + (x0 + bw) + "," + (y1 + 4) + "V" + y0 + 'Z"/>');
+        } else {
+          out.push("<rect " + fill + ' x="' + x0 + '" y="' + y1 + '" width="' + bw + '" height="' + h + '"/>');
+        }
+      });
+      if (c.a.kg > 0) out.push('<text class="val" x="' + cx + '" y="' + (y(c.a.kg / 1000) - 6) + '" text-anchor="middle">' + nf0.format(c.a.kg / 1000) + "</text>");
+      out.push('<text x="' + cx + '" y="' + (base + 18) + '" text-anchor="middle"' + (c.key === "late" ? ' style="fill:var(--crit-ink)"' : "") + ">" + c.label + "</text>");
+    });
+    var yr = y(consT);
+    out.push('<line x1="' + ml + '" x2="' + (ml + pw) + '" y1="' + yr + '" y2="' + yr + '" style="stroke:var(--ink-2);stroke-width:1.5"/>');
+    out.push('<text class="reflbl" x="' + (ml + 2) + '" y="' + (yr - 6) + '" text-anchor="start">צריכה חודשית ' + nf0.format(consT) + " ט׳</text>");
+    cats.forEach(function (c, i) {
+      out.push('<rect data-i="' + i + '" x="' + (ml + pw - (i + 1) * band) + '" y="' + mt + '" width="' + band + '" height="' + ph + '" style="fill:transparent;cursor:default"/>');
+    });
+    state.arrCats = cats;
+    var legend = '<div class="legend">' + MAT_ORDER.map(function (m) { return '<span><i class="sw" style="--c:' + MAT_C[m] + '"></i>' + MAT[m] + "</span>"; }).join("") +
+      '<span><i class="ln"></i>צריכה חודשית ממוצעת</span></div>';
+    return legend + '<svg class="chart" id="arr-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="טונות צפויים להגיע לפי חודש">' + out.join("") + "</svg>";
+  }
+  function arrivalTip(c) {
+    var rows = MAT_ORDER.filter(function (m) { return c.a.byMaterial[m]; }).map(function (m) {
+      return '<div class="row"><span><i class="sw" style="--c:' + MAT_C[m] + '"></i>' + MAT[m] + "</span><span>" + tons(c.a.byMaterial[m]) + " ט׳</span></div>";
+    }).join("");
+    return "<b>" + c.label + "</b>" + rows + '<div class="row"><span>סה״כ</span><span>' + tons(c.a.kg) + " ט׳</span></div>" +
+      (c.a.kg ? '<div class="row"><span>הזמנות</span><span>' + c.a.poCount + '</span></div><div class="row"><span>שווי</span><span>' + money(c.a.usd, "$") + "</span></div>" : "");
+  }
+
+  function inbound(d) {
+    var sup = d.suppliers;
+    var maxKg = Math.max.apply(null, sup.map(function (s) { return s.kgOpen + s.draftKg; }).concat([1]));
+    var list = '<ul class="mlist">' + sup.map(function (s) {
+      var by = {};
+      MAT_ORDER.forEach(function (m) { by[m] = s.byMaterial[m] ? s.byMaterial[m].kg : 0; });
+      var notes = [s.poCount + (s.poCount === 1 ? " הזמנה" : " הזמנות")];
+      if (s.pricePerTon) notes.push(money(s.pricePerTon, "$") + " לטון");
+      if (s.nextEta) notes.push("הגעה קרובה " + dmy(s.nextEta));
+      if (s.draftKg) notes.push(tons(s.draftKg) + " ט׳ בטיוטה");
+      return '<li><div class="mrow"><span class="name">' + esc(s.supplier) + (s.local ? ' <span class="tag">מקומי</span>' : "") +
+        '</span><span class="n"><b>' + tons(s.kgOpen) + "</b> ט׳</span></div>" +
+        matBar(by, Math.max(s.kgOpen, 1), s.kgOpen / maxKg * 100) +
+        '<div class="mline">' + notes.join(" · ") + (s.lateKg ? ' · <span class="pill" style="--c:var(--crit)">' + tons(s.lateKg) + " ט׳ באיחור</span>" : "") + "</div></li>";
+    }).join("") + "</ul>";
+    return '<div class="grid two">' +
+      '<section class="panel"><div class="panel-head"><h2>מה מגיע ומתי</h2><p>יתרות לאספקה לפי חודש הגעה צפוי, בלי טיוטות</p></div>' + arrivalsChart(d) + "</section>" +
+      '<section class="panel"><div class="panel-head"><h2>ספקים</h2><p>טון פתוח ומחיר ממוצע</p></div>' + list + "</section></div>";
+  }
+
+  function poTable(d) {
+    var rows = d.pos.map(function (p) {
+      var open = !!state.poOpen[p.po];
+      var ship = p.ship ? esc(p.ship) + (p.containers ? ' <span class="dim">· ' + p.containers + " מכולות</span>" : "") : DOT;
+      var main = '<tr class="click" data-po="' + esc(p.po) + '" tabindex="0" aria-expanded="' + open + '">' +
+        '<td><span class="sku">' + (open ? "▾ " : "▸ ") + esc(p.po) + "</span></td>" +
+        '<td class="wrap">' + esc(p.supplier) + "</td>" +
+        "<td>" + (p.draft ? '<span class="pill" style="--c:var(--dead)">' + esc(p.status) + "</span>" : '<span class="pill outline">' + esc(p.status) + "</span>") + "</td>" +
+        "<td>" + dmy(p.orderDate) + "</td>" +
+        "<td>" + etaCell(p.eta, p.late) + "</td>" +
+        '<td class="wrap">' + ship + "</td>" +
+        '<td class="n">' + tons(p.kgOpen) + "</td>" +
+        '<td class="n">' + money(p.usd, "$") + "</td>" +
+        '<td class="n">' + (p.pricePerTon ? money(p.pricePerTon, "$") : DOT) + "</td>" +
+        "<td>" + esc(p.payTerms || "") + (p.paid ? ' <span class="pill" style="--c:var(--good)">שולם</span>' : "") + "</td></tr>";
+      if (!open) return main;
+      var lines = p.lines.filter(function (l) { return l.kgOpen > 0; }).map(function (l) {
+        return "<tr><td>" + '<span class="sku">' + esc(l.sku) + '</span></td><td class="wrap">' + esc(l.desc) + "</td><td>" + matTag(l.material) + '</td><td class="n">' + tons(l.kgOrdered) + '</td><td class="n">' + tons(l.kgOpen) + '</td><td class="n">' + (l.pricePerTon ? nf0.format(l.pricePerTon) + " " + esc(l.currency) : DOT) + '</td><td class="n">' + money(l.openUsd, "$") + "</td></tr>";
+      }).join("");
+      return main + '<tr><td colspan="10" style="background:var(--surface-2);padding:8px 10px"><div class="tbl-scroll"><table><thead><tr><th class="plain">מק״ט</th><th class="plain">תיאור</th><th class="plain">חומר</th><th class="plain n">הוזמן ט׳</th><th class="plain n">פתוח ט׳</th><th class="plain n">מחיר לטון</th><th class="plain n">שווי פתוח</th></tr></thead><tbody>' + lines + "</tbody></table></div></td></tr>";
+    }).join("");
+    return '<section class="panel" id="orders"><div class="panel-head"><h2>הזמנות ספק פתוחות</h2><p>לפי תאריך הגעה צפוי. לחיצה על הזמנה פותחת את השורות.</p></div>' +
+      '<div class="tbl-scroll"><table><thead><tr><th class="plain">הזמנה</th><th class="plain">ספק</th><th class="plain">סטטוס</th><th class="plain">הוזמן</th><th class="plain">הגעה צפויה</th><th class="plain">אוניה</th><th class="plain n">פתוח ט׳</th><th class="plain n">שווי</th><th class="plain n">לטון</th><th class="plain">תשלום</th></tr></thead><tbody>' +
+      rows + "</tbody></table></div></section>";
+  }
+
+  // ---------- explorer ----------
+  function explorerRows(d) {
+    var q = state.q.trim().toLowerCase();
+    return d.visible.filter(function (x) {
+      if (state.bucket && x.bucket !== state.bucket) return false;
+      if (state.family && x.family !== state.family) return false;
+      if (q && (x.sku.toLowerCase().indexOf(q) === -1 && x.desc.toLowerCase().indexOf(q) === -1)) return false;
+      return true;
+    });
+  }
+  function explorerTable(d) {
+    var rows = explorerRows(d);
+    var html = defineTable("explorer",
+      [C.sku, C.desc, C.family, C.material, C.state, C.stock, C.cons, C.cov, C.onOrder, C.eta, C.min, C.cost, C.list, C.value], rows,
+      { sort: { key: "valueIls", dir: -1 }, limit: 40, empty: "אין פריטים שתואמים לסינון." });
+    var st = rows.reduce(function (s, x) { return s + x.stockKg; }, 0);
+    var val = rows.reduce(function (s, x) { return s + x.valueIls; }, 0);
+    return '<p class="summary">' + nf0.format(rows.length) + " מק״טים · " + tons(st) + " ט׳ · " + money(val, "₪") + "</p>" + html;
+  }
+  function explorer(d) {
+    var chips = '<div class="chips" role="group" aria-label="סינון לפי מצב כיסוי">' +
+      '<button type="button" class="chip all" data-bucket="" aria-pressed="' + !state.bucket + '"><span class="cl">הכל</span><small>' + nf0.format(d.visible.length) + " מק״טים</small></button>" +
+      d.buckets.map(function (b) {
+        var x = BUCKET[b.bucket];
+        return '<button type="button" class="chip" data-bucket="' + b.bucket + '" aria-pressed="' + (state.bucket === b.bucket) + '" style="--c:' + x.c + '"><span class="cl">' + x.label + "</span><small>" + x.long + " · " + nf0.format(b.skus) + " · " + tons(b.stockKg) + " ט׳</small></button>";
+      }).join("") + "</div>";
+    var fams = d.families.map(function (f) { return f.family; }).sort();
+    var filters = '<div class="filters"><input type="search" id="q" placeholder="חיפוש מק״ט או תיאור, למשל HEB 200" value="' + esc(state.q) + '" aria-label="חיפוש פריט">' +
+      '<select id="fam" aria-label="משפחה"><option value="">כל המשפחות</option>' + fams.map(function (f) {
+        return '<option value="' + esc(f) + '"' + (state.family === f ? " selected" : "") + ">" + esc(f) + "</option>";
+      }).join("") + "</select></div>";
+    return '<section class="panel" id="explorer"><div class="panel-head"><h2>כל הפריטים</h2><p>חודשי מלאי: מלאי חלקי צריכה חודשית</p></div>' + chips + filters +
+      '<div id="explorer-table" class="tbl" style="gap:8px">' + explorerTable(d) + "</div></section>";
+  }
+  function repaintExplorer(scroll) {
+    var el = document.getElementById("explorer");
+    if (!el || !state.d) return;
+    el.outerHTML = explorer(state.d);
+    if (scroll) document.getElementById("explorer").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ---------- data quality ----------
+  function quality(d) {
+    var Q = d.quality;
+    var items = [];
+    function add(n, c, title, why, body) {
+      items.push('<details class="q"><summary><span class="qn" style="--c:' + c + '">' + n + '</span><span class="qt">' + title + '</span><span class="qw">' + why + '</span></summary><div class="qbody">' + body + "</div></details>");
+    }
+    var negKg = Q.netNegative.reduce(function (s, x) { return s + x.stockKg; }, 0);
+    add(nf0.format(Q.netNegative.length), "var(--crit)", "מק״טים עם מלאי נטו שלילי (" + tons(negKg) + " ט׳)",
+      "יצא יותר ממה שנקלט. מעוות את הכיסוי ואת שווי המלאי, ולרוב מסתיר קליטה שלא נרשמה או גלוון שלא דווח.",
+      defineTable("q-neg", [C.sku, C.desc, C.stock, C.cons, C.onOrder], Q.netNegative, { sort: { key: "stockKg", dir: 1 }, limit: 15 }));
+    var binKg = Q.negativeBins.reduce(function (s, x) { return s + x.kg; }, 0);
+    add(nf0.format(Q.negativeBins.length), "var(--serious)", "איתורים עם יתרה שלילית (" + tons(binKg) + " ט׳)",
+      "הסחורה זזה פיזית בלי העברה במערכת. הסך לפריט יכול להיות נכון, אבל הליקוט לפי איתור לא.",
+      defineTable("q-bins", [C.sku, C.desc, { key: "wh", label: "מחסן", fmt: function (r) { return '<span class="sku">' + esc(r.wh) + "</span>"; } },
+        { key: "loc", label: "איתור", fmt: function (r) { return '<span class="sku">' + esc(r.loc || "ריק") + "</span>"; } },
+        { key: "kg", label: "יתרה ק״ג", num: true, fmt: function (r) { return kgCell(r.kg); } }], Q.negativeBins, { sort: { key: "kg", dir: 1 }, limit: 15 }));
+    add(pct.format(Q.unlocatedShare), "var(--warn)", "מהמלאי החיובי בלי איתור (" + tons(Q.unlocatedKg) + " ט׳)",
+      "יתרות באיתור 0 או ריק. קשה לספור ולמצוא אותן, וזה המקור הסביר לחלק מהאיתורים השליליים.", "<p>היתרות האלה רשומות במחסן אבל לא בתא. שווה לשייך אותן בספירה הבאה.</p>");
+    add(nf0.format(Q.lateLines.length), "var(--serious)", "שורות הזמנה שתאריך ההגעה שלהן עבר (" + tons(Q.lateLines.reduce(function (s, l) { return s + l.kgOpen; }, 0)) + " ט׳)",
+      "אם הסחורה הגיעה, צריך לסגור את היתרה. אם לא, צריך תאריך חדש מהספק. אחרת הכיסוי הכולל מנופח.",
+      defineTable("q-late", [{ key: "po", label: "הזמנה", fmt: function (r) { return '<span class="sku">' + esc(r.po) + "</span>"; } },
+        { key: "supplier", label: "ספק", cls: "wrap", fmt: function (r) { return esc(r.supplier); } }, C.sku, C.desc,
+        { key: "eta", label: "תאריך צפוי", fmt: function (r) { return dmy(r.eta); } },
+        { key: "kgOpen", label: "פתוח ק״ג", num: true, fmt: function (r) { return kg(r.kgOpen); } }], Q.lateLines, { sort: { key: "eta", dir: 1 }, limit: 15 }));
+    add(nf0.format(Q.defaultMin.count), "var(--warn)", "פריטים פעילים עם אותו מינימום בדיוק: " + kg(Q.defaultMin.value) + " ק״ג (מתוך " + nf0.format(Q.defaultMin.of) + ")",
+      "ערך ברירת מחדל ולא נקודת הזמנה. מינימום אמיתי = צריכה חודשית כפול זמן אספקה, ועוד מלאי ביטחון.",
+      "<p>" + nf0.format(Q.noMin.length) + " פריטים נוספים עם צריכה ובלי מינימום בכלל. בלוח הזה ההתראות מבוססות על צריכה וזמן אספקה, לא על שדה המינימום.</p>");
+    var flagBody = (Q.unflagged.length ? "<p><b>" + Q.unflagged.length + "</b> פריטים מטיפוס מקצועי בלי סימון Y: " + Q.unflagged.map(function (u) { return '<span class="sku">' + esc(u[0]) + "</span>"; }).join(", ") + "</p>" : "") +
+      (Q.flaggedOtherType.length ? "<p><b>" + Q.flaggedOtherType.length + "</b> פריטים מסומנים Y אבל מטיפוס אחר (לא נכללו): " + Q.flaggedOtherType.map(function (u) { return '<span class="sku">' + esc(u[0]) + "</span> (" + esc(u[2]) + ")"; }).join(", ") + "</p>" : "");
+    add(nf0.format(Q.unflagged.length + Q.flaggedOtherType.length), "var(--dead)", "סימון \"ברזל מקצועי\" לא תואם לטיפוס המשפחה",
+      "הלוח משתמש בטיפוס המשפחה. דוחות שמסננים לפי הדגל Y יראו מספרים אחרים.", flagBody || "<p>אין.</p>");
+    if (Q.consMismatch.length) {
+      add(nf0.format(Q.consMismatch.length), "var(--dead)", "צריכה חודשית שונה בין דוח המלאי לכרטיס הפריט",
+        "הדוחות הופקו בזמנים שונים. הלוח משתמש בערך מדוח המלאי.",
+        defineTable("q-cons", [{ key: "0", label: "מק״ט", fmt: function (r) { return '<span class="sku">' + esc(r[0]) + "</span>"; } },
+          { key: "1", label: "דוח מלאי", num: true, fmt: function (r) { return kg(r[1]); } },
+          { key: "2", label: "כרטיס פריט", num: true, fmt: function (r) { return kg(r[2]); } }], Q.consMismatch, { limit: 10 }));
+    }
+    return '<section class="panel" id="quality"><div class="panel-head"><h2>איכות נתונים</h2><p>דברים שמעוותים את המספרים למעלה ושווה לתקן בפריוריטי</p></div><div class="qlist">' + items.join("") + "</div></section>";
+  }
+
+  function methodology(d) {
+    return '<section class="panel method" id="method"><h2>איך זה מחושב</h2><dl>' +
+      "<dt>ברזל מקצועי</dt><dd>פריטים שטיפוס המשפחה שלהם בכרטיס הפריט הוא \"מקצועי\" (HEA, HEB, IPE, UPN, שטוח, זוויות, עגול, מרובע ועוד), " + nf0.format(state.snap.parts.length) + " מק״טים.</dd>" +
+      "<dt>מלאי</dt><dd>סכום היתרות מכל המחסנים והאיתורים בדוח המלאי. ערך = השדה \"ערך\" (יתרה כפול עלות ממוצעת).</dd>" +
+      "<dt>צריכה חודשית</dt><dd>השדה \"צריכה חודשית\" בדוח המלאי (זהה ל\"ממוצע יציאות\" בכרטיס). תקופת הממוצע מוגדרת בפריוריטי ולא מופיעה בקובץ, כדאי לוודא אותה.</dd>" +
+      "<dt>בדרך</dt><dd>יתרה לאספקה בהזמנות ספק פתוחות, בלי טיוטות. תאריך צפוי = תאריך הגעה, ואם אין, תאריך אספקה.</dd>" +
+      "<dt>זמן אספקה מיבוא</dt><dd>חציון הזמן מתאריך ההזמנה ועד ההגעה הצפויה, בהזמנות במטבע זר (" + d.leadTimes.length + " הזמנות, טווח " +
+      nf1.format(Math.min.apply(null, d.leadTimes.map(function (x) { return x.months; }).concat([d.leadTime]))) + " עד " +
+      nf1.format(Math.max.apply(null, d.leadTimes.map(function (x) { return x.months; }).concat([d.leadTime]))) + " חודשים).</dd>" +
+      "<dt>להזמין</dt><dd>פריט פעיל שהמלאי וההזמנות הפתוחות שלו מכסים פחות חודשים מזמן האספקה מיבוא.</dd>" +
+      "<dt>ייגמר לפני ההגעה</dt><dd>צריכה חודשית כפול החודשים עד ההגעה הקרובה גדולה מהמלאי הנוכחי.</dd>" +
+      "<dt>מרווח מחירון</dt><dd>1 פחות עלות ממוצעת חלקי מחיר מחירון בסיס, משוקלל לפי מלאי. זה לא מחיר המכירה בפועל.</dd>" +
+      "<dt>תאריך ייחוס</dt><dd>" + dmy(d.refDate) + ", תאריך הפקת דוח המלאי. \"באיחור\" נמדד מולו.</dd></dl></section>";
+  }
+
+  // ---------- render ----------
+  function render() {
+    renderStamps();
+    renderMatSeg();
+    renderNotice();
+    var main = document.getElementById("main");
+    tables = {};
+    if (!state.snap) { state.d = null; main.innerHTML = emptyState(); return; }
+    var d;
+    try { d = M.compute(state.snap, { material: state.material }); }
+    catch (e) {
+      state.d = null;
+      main.innerHTML = '<div class="notice error">החישוב נכשל: ' + esc(e.message) + "</div>";
+      return;
+    }
+    state.d = d;
+    main.innerHTML = kpis(d) + attention(d) + overview(d) + inbound(d) + poTable(d) + explorer(d) + quality(d) + methodology(d);
+  }
+
+  // ---------- loading files ----------
+  function handleFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    Promise.all(files.map(function (f) {
+      return f.arrayBuffer().then(function (b) { return { name: f.name, text: M.decode(b) }; });
+    })).then(function (results) {
+      var unknown = [];
+      results.forEach(function (r) {
+        var kind = M.detectKind(M.parseTsv(r.text.slice(0, 4000)).header);
+        if (kind) state.pending[kind] = r; else unknown.push(r.name);
+      });
+      var missing = Object.keys(KIND).filter(function (k) { return !state.pending[k]; });
+      if (missing.length) {
+        state.notice = {
+          type: unknown.length ? "error" : "info",
+          html: (unknown.length ? "לא זיהיתי את " + unknown.map(esc).join(", ") + ". " : "") + "חסרים עוד: " + missing.map(function (k) { return KIND[k]; }).join(", ") + ".",
+        };
+        renderNotice();
+        return;
+      }
+      var snap = M.extract([state.pending.parts.text, state.pending.stock.text, state.pending.orders.text]);
+      state.pending = {};
+      state.snap = snap; state.source = "upload"; state.loadedAt = new Date().toISOString();
+      var kept = save("upload", { snap: snap, loadedAt: state.loadedAt });
+      state.notice = { type: "info", html: "נטענו נתונים חדשים: מלאי מ־" + esc(snap.meta.stockRun) + ", " + nf0.format(snap.parts.length) + " מק״טים." + (kept ? "" : " הדפדפן לא שמר אותם, אז בטעינה הבאה יוצגו נתוני הדוח המקוריים.") };
+      render();
+    }).catch(function (e) {
+      state.pending = {};
+      state.notice = { type: "error", html: "לא הצלחתי לקרוא את הקבצים: " + esc(e.message) + ". ודאו שאלה ייצואים מפריוריטי בפורמט טקסט עם טאבים." };
+      renderNotice();
+    });
+  }
+
+  // ---------- events ----------
+  var fileInput = document.getElementById("file-input");
+  fileInput.addEventListener("change", function () { handleFiles(fileInput.files); fileInput.value = ""; });
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    var el;
+    if ((el = t.closest("#load-btn, [data-load]"))) { fileInput.click(); return; }
+    if ((el = t.closest("[data-reset]"))) { drop("upload"); state.notice = null; pickSource(); render(); return; }
+    if ((el = t.closest("[data-mat]"))) { state.material = el.getAttribute("data-mat"); save("material", state.material); render(); return; }
+    if ((el = t.closest("[data-tab]"))) {
+      state.tab = el.getAttribute("data-tab"); save("tab", state.tab);
+      var sec = document.getElementById("attention");
+      if (sec && state.d) sec.outerHTML = attention(state.d);
+      var btn = document.getElementById("tab-" + state.tab); if (btn) btn.focus();
+      return;
+    }
+    if ((el = t.closest("th[data-sort]"))) {
+      var id = el.closest("[data-table]").getAttribute("data-table");
+      var key = el.getAttribute("data-sort");
+      var def = tables[id];
+      var col = def.cols.filter(function (c) { return c.key === key; })[0];
+      var cur = state.sorts[id] || def.opt.sort;
+      state.sorts[id] = { key: key, dir: cur && cur.key === key ? -cur.dir : (col.num ? -1 : 1) };
+      repaintTable(id);
+      return;
+    }
+    if ((el = t.closest("[data-more]"))) { var mid = el.getAttribute("data-more"); state.limits[mid] = 100000; repaintTable(mid); return; }
+    if ((el = t.closest("[data-bucket]"))) { var b = el.getAttribute("data-bucket"); state.bucket = b && state.bucket !== b ? b : null; repaintExplorer(false); return; }
+    if ((el = t.closest("[data-family]"))) { state.family = el.getAttribute("data-family"); state.bucket = null; state.q = ""; repaintExplorer(true); return; }
+    if ((el = t.closest("[data-po]"))) {
+      var po = el.getAttribute("data-po"); state.poOpen[po] = !state.poOpen[po];
+      var o = document.getElementById("orders"); if (o && state.d) o.outerHTML = poTable(state.d);
+      return;
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var el = e.target.closest && e.target.closest("tr[data-family], tr[data-po]");
+    if (el) { e.preventDefault(); el.click(); }
+  });
+  document.addEventListener("input", function (e) {
+    if (e.target.id !== "q" || !state.d) return;
+    state.q = e.target.value;
+    var box = document.getElementById("explorer-table");
+    if (box) box.innerHTML = explorerTable(state.d);
+  });
+  document.addEventListener("change", function (e) {
+    if (e.target.id !== "fam" || !state.d) return;
+    state.family = e.target.value;
+    var box = document.getElementById("explorer-table");
+    if (box) box.innerHTML = explorerTable(state.d);
+  });
+
+  // tooltip for the arrivals chart
+  var tip = document.getElementById("tip");
+  document.addEventListener("mousemove", function (e) {
+    var hit = e.target.closest && e.target.closest("#arr-chart [data-i]");
+    if (!hit || !state.arrCats) { tip.hidden = true; return; }
+    var c = state.arrCats[+hit.getAttribute("data-i")];
+    tip.innerHTML = arrivalTip(c);
+    tip.hidden = false;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var x = e.clientX + 14, y = e.clientY + 14;
+    if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
+    tip.style.left = Math.max(8, x) + "px";
+    tip.style.top = Math.max(8, y) + "px";
+  });
+  document.addEventListener("mouseleave", function () { tip.hidden = true; });
+
+  // drag and drop anywhere on the page
+  window.addEventListener("dragover", function (e) { e.preventDefault(); document.body.classList.add("dragging"); });
+  window.addEventListener("dragleave", function (e) { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault(); document.body.classList.remove("dragging");
+    if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+  });
+
+  pickSource();
+  render();
+})();
+</script>
+<!--@/body-->
+</body>
+</html>

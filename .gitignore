@@ -12,3 +12,9 @@ prisma/migrations/migration_lock.toml.bak
 .vercel
 .turbo
 coverage
+
+# Structural steel dashboard: built files may embed company data, never commit them
+steel-dashboard/dist/
+steel-dashboard/data/
+*.xls
+*.xlsx
