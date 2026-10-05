@@ -581,7 +581,11 @@
   //   import need = consumption from arrival to "until" - stock at arrival - orders due in between
   // Surplus of a longer length passes down to the shorter ones (12m can be cut to 6m, not back).
   // A 6.05m need is added to its 12.1m sibling: 6.05m is cut from 12.1m, never imported.
-  // Needs are rounded up to the order step; needs under half a step are flagged, not ordered.
+  // A line is at least the minimum (5 t) and rounded up to the step; needs under half the
+  // minimum are flagged, not ordered.
+
+  // Smallest quantity worth a line on an import order; needs under half of it are not ordered.
+  var MIN_LINE_KG = 5000;
 
   function addMonths(ym, n) {
     var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n;
@@ -595,7 +599,7 @@
     ["BLA", "MEG"].forEach(function (m) {
       var lead = d.leadFixed ? d.leadTime : (d.leadByMaterial[m] && d.leadByMaterial[m].months) || d.leadTime;
       var arrival = addMonths(ref, Math.max(1, Math.round(lead)));
-      params[m] = { arrival: arrival, until: addMonths(arrival, 3), stepKg: 5000 };
+      params[m] = { arrival: arrival, until: addMonths(arrival, 3), stepKg: 5000, minKg: MIN_LINE_KG };
     });
     return params;
   }
@@ -626,6 +630,7 @@
           if ((l.orderDate || "") >= lastDate) { lastDate = l.orderDate || ""; lastSupplier = l.supplier; }
         });
         var cons = Math.max(x.cons, 0);
+        var carryInA = carryA, carryInC = carryC;
         var supplyA = x.stockKg + inA + carryA;
         var local = x.active ? Math.max(0, cons * toA - supplyA) : 0;
         var atA = Math.max(0, supplyA - cons * toA);
@@ -637,18 +642,20 @@
         var fp = famPrice[x.family + "|" + x.material];
         var price = priceKg > 0 ? priceUsd / (priceKg / 1000) : fp && fp.kg > 0 ? fp.usd / (fp.kg / 1000) : null;
         return {
-          item: x, inA: inA, inC: inC, atA: atA, local: local, need: need, cutKg: 0, cutTo: null,
+          item: x, inA: inA, inC: inC, carryInA: carryInA, carryInC: carryInC, atA: atA, local: local,
+          need: need, ownNeed: need, cutKg: 0, cutTo: null, cutIn: 0,
           price: price, priceFromSku: priceKg > 0, lastSupplier: lastSupplier,
         };
       });
       var long = rows.filter(function (r) { return r.item.lengthM === 12 && !r.item.china && r.item.active; })[0];
       rows.forEach(function (r) {
         if (r.item.half && long && r.need > 0) {
-          long.need += r.need; r.cutKg = r.need; r.cutTo = long.item.sku; r.need = 0;
+          long.need += r.need; long.cutIn += r.need; r.cutKg = r.need; r.cutTo = long.item.sku; r.need = 0;
         }
       });
+      var minKg = P.minKg || MIN_LINE_KG;
       rows.forEach(function (r) {
-        r.rec = r.need >= P.stepKg / 2 ? Math.ceil(r.need / P.stepKg) * P.stepKg : 0;
+        r.rec = r.need >= minKg / 2 ? Math.max(minKg, Math.ceil(r.need / P.stepKg) * P.stepKg) : 0;
         r.small = r.need > 0 && r.rec === 0;
       });
       var sum = function (f) { return rows.reduce(function (s, r) { return s + f(r); }, 0); };
@@ -672,7 +679,16 @@
   //   prices  - families bought from more than one supplier, cheapest first
   //   dead    - profiles with stock and no consumption
 
-  var SWAP_SOON_MONTHS = 2;
+  // Business rule: an order can be changed only during its first month; after that it is closed,
+  // shipped or not.
+  var CHANGE_WINDOW_MONTHS = 1;
+
+  function addCalendarMonths(iso, n) {
+    var y = +iso.slice(0, 4), m = +iso.slice(5, 7) - 1 + n, day = +iso.slice(8, 10);
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    var last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return y + "-" + pad(m + 1) + "-" + pad(Math.min(day, last));
+  }
 
   function addDays(iso, days) {
     return new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
@@ -697,24 +713,27 @@
       x.lines.forEach(function (l) {
         if (l.draft || l.kgOpen <= 0 || l.currency === 'ש"ח') return;
         var p = poMap[l.po] || (poMap[l.po] = {
-          po: l.po, supplier: l.supplier, status: l.status, eta: l.eta, ship: l.ship,
-          monthsToEta: l.eta ? monthsBetween(d.refDate, l.eta) : null, kg: 0, usd: 0, lines: [],
+          po: l.po, supplier: l.supplier, status: l.status, eta: l.eta, ship: l.ship, orderDate: l.orderDate,
+          changeUntil: l.orderDate ? addCalendarMonths(l.orderDate, CHANGE_WINDOW_MONTHS) : null, kg: 0, usd: 0, lines: [],
         });
         p.kg += l.kgOpen; p.usd += l.openUsd;
+        (p.materials = p.materials || {})[x.material] = true;
         p.lines.push({ sku: x.sku, desc: x.desc, kg: l.kgOpen, usd: l.openUsd, coverage: g.coverage, cons: g.cons });
       });
     });
     var swaps = Object.keys(poMap).map(function (k) {
       var p = poMap[k];
-      p.state = p.ship ? "shipped" : p.monthsToEta !== null && p.monthsToEta < SWAP_SOON_MONTHS ? "check" : "open";
+      p.state = p.ship ? "shipped" : p.changeUntil && d.refDate <= p.changeUntil ? "open" : "locked";
       var fam = sells[p.supplier] || {};
-      p.candidates = short.filter(function (r) { return fam[r.item.material + "|" + r.item.family]; })
+      // Convert within the order's own material (black stays black), into families the supplier sells.
+      p.candidates = short.filter(function (r) { return p.materials[r.item.material] && fam[r.item.material + "|" + r.item.family]; })
         .sort(function (a, b) { return (b.local + b.rec) - (a.local + a.rec); }).slice(0, 6);
       p.lines.sort(function (a, b) { return b.kg - a.kg; });
       return p;
     }).sort(function (a, b) {
-      var rank = { open: 0, check: 1, shipped: 2 };
-      return rank[a.state] - rank[b.state] || b.kg - a.kg;
+      var rank = { open: 0, locked: 1, shipped: 2 };
+      if (rank[a.state] !== rank[b.state]) return rank[a.state] - rank[b.state];
+      return (a.changeUntil || "") < (b.changeUntil || "") ? -1 : (a.changeUntil || "") > (b.changeUntil || "") ? 1 : b.kg - a.kg;
     });
 
     var local = short.filter(function (r) { return r.local > 0; }).map(function (r) {
@@ -756,7 +775,8 @@
   var api = {
     decode: decode, parseTsv: parseTsv, detectKind: detectKind,
     extract: extract, compute: compute, isoDate: isoDate,
-    profileOf: profileOf, plan: plan, recommend: recommend, DEFAULT_LEAD_MONTHS: DEFAULT_LEAD_MONTHS, DEFAULT_EXCLUDED_WH: DEFAULT_EXCLUDED_WH, defaultPlanParams: defaultPlanParams, addMonths: addMonths,
+    profileOf: profileOf, plan: plan, recommend: recommend, MIN_LINE_KG: MIN_LINE_KG,
+    CHANGE_WINDOW_MONTHS: CHANGE_WINDOW_MONTHS, DEFAULT_LEAD_MONTHS: DEFAULT_LEAD_MONTHS, DEFAULT_EXCLUDED_WH: DEFAULT_EXCLUDED_WH, defaultPlanParams: defaultPlanParams, addMonths: addMonths,
   };
   root.SteelModel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

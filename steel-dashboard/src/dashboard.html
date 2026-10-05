@@ -647,7 +647,7 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
       xs = a.overOrdered;
       sum = "<b>" + nf0.format(xs.length) + " פרופילים</b> עם יותר מ־" + d.overstockMonths + " חודשי מלאי (או בלי צריכה) ועדיין בהזמנה פתוחה: <b>" +
         tons(total(xs, function (x) { return x.onOrderKg; })) + " ט׳</b> בשווי " + money(total(xs, function (x) { return x.onOrderUsd; }), "$") + ". " +
-        '<span class="muted">מועמדים לדחייה, הקטנה או המרה למידות חסרות מול הספק, כל עוד לא הועמסו.</span>';
+        '<span class="muted">אפשר לשנות רק הזמנות שבוצעו בחודש האחרון; ישנות יותר נעולות. פירוט בדף הזמנת היבוא.</span>';
       return '<p class="summary">' + sum + "</p>" + defineTable("overOrdered",
         [C.profile, C.material, C.lengths, C.cons, C.cov, C.onOrder, C.eta, C.pipe, C.orderUsd], xs,
         { sort: { key: "onOrderKg", dir: -1 }, limit: 15, empty: "אין הזמנות פתוחות על פרופילים בעודף." });
@@ -940,7 +940,8 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
       "<dt>בדרך</dt><dd>יתרה לאספקה בהזמנות ספק פתוחות, בלי טיוטות. תאריך צפוי = תאריך הגעה, ואם אין, תאריך אספקה.</dd>" +
       "<dt>זמן אספקה מיבוא</dt><dd>" + (d.leadFixed ? "כלל עבודה: " + nf1.format(d.leadTime) + " חודשים מההזמנה ועד ההגעה, בשחור ובמגולוון, וניתן לשינוי בדף ההזמנה. לשם השוואה, " : "") +
       "בהזמנות במטבע זר שפתוחות עכשיו הזמן מתאריך ההזמנה ועד ההגעה הצפויה הוא " + (lt.length ? nf1.format(Math.min.apply(null, lt)) + " עד " + nf1.format(Math.max.apply(null, lt)) : "") + " חודשים (" + lt.length + " הזמנות).</dd>" +
-      "<dt>המלצת יבוא</dt><dd>לכל מק״ט: צריכה מחודש ההגעה ועד חודש היעד, פחות המלאי שיישאר בהגעה ופחות הזמנות שמגיעות בתקופה. עודף באורך ארוך עובר לאורך הקצר (חיתוך), לא להפך. צורך של 6.05 מ׳ מתווסף ל־12.1 מ׳, כי 6.05 נחתך מ־12.1. מעוגל למעלה לפי צעד ההזמנה.</dd>" +
+      "<dt>המלצת יבוא</dt><dd>לכל מק״ט: צריכה מחודש ההגעה ועד חודש היעד, פחות המלאי שיישאר בהגעה ופחות הזמנות שמגיעות בתקופה. עודף באורך ארוך עובר לאורך הקצר (חיתוך), לא להפך. צורך של 6.05 מ׳ מתווסף ל־12.1 מ׳, כי 6.05 נחתך מ־12.1. מינימום 5 ט׳ לשורה ומעוגל למעלה לפי צעד ההזמנה; צורך קטן מחצי המינימום לא מוזמן.</dd>" +
+      "<dt>שינוי הזמנה</dt><dd>הזמנה אפשר לשנות רק בחודש הראשון אחרי שבוצעה. אחרי זה היא נעולה, גם אם עוד לא נשלחה.</dd>" +
       "<dt>חוסר עד ההגעה</dt><dd>מה שייגמר לפני שהיבוא יכול להגיע: צריכה עד חודש ההגעה פחות מלאי והזמנות שמגיעות עד אז. לגשר ברכש מקומי או בהקדמת משלוח.</dd>" +
       "<dt>מחיר משוער</dt><dd>מחיר הדולר לטון בהזמנות הפתוחות לאותו מק״ט, ואם אין, ממוצע המשפחה והחומר. FOB/CFR כפי שבהזמנה, בלי מכס והובלה.</dd>" +
       "<dt>תאריך ייחוס</dt><dd>" + dmy(d.refDate) + ", תאריך הפקת דוח המלאי. \"באיחור\" נמדד מולו.</dd></dl></section>";
@@ -990,7 +991,7 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
         '<label for="p-' + m + '-step">עיגול ל־<select id="p-' + m + '-step" data-param="' + m + ':stepKg">' + [1000, 2000, 5000, 10000].map(function (s) {
           return '<option value="' + s + '"' + (s === p.stepKg ? " selected" : "") + ">" + s / 1000 + " ט׳</option>";
         }).join("") + "</select></label>" +
-        "<small>הזמנה שיוצאת עכשיו תגיע בערך ב־" + monthLabel(M.addMonths(ref, Math.round(state.leadMonths))) + ". מוקדם מזה היבוא לא יגיע.</small></div>";
+        "<small>מינימום " + nf0.format((p.minKg || M.MIN_LINE_KG) / 1000) + " ט׳ לשורה. הזמנה שיוצאת עכשיו תגיע בערך ב־" + monthLabel(M.addMonths(ref, Math.round(state.leadMonths))) + ".</small></div>";
     }).join("") + "</div>";
   }
   function orderTotals(pl) {
@@ -1050,7 +1051,7 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
         var changed = state.overrides[x.sku] != null && state.overrides[x.sku] !== r.rec;
         var needCell = r.cutTo
           ? '<span class="note-cut">' + kg(r.cutKg) + " נחתך מ־" + esc(r.cutTo) + "</span>"
-          : r.need > 0 ? kg(r.need) + (r.small ? '<span class="hint">פחות מחצי צעד, לא הוזמן</span>' : "") : DOT;
+          : r.need > 0 ? kg(r.need) + (r.small ? '<span class="hint">פחות מחצי המינימום, לא הוזמן</span>' : "") : DOT;
         return '<tr class="sub"><td>' + lenLabel(x) + (x.active ? "" : ' <span class="tag">לא פעיל</span>') + '</td><td><span class="sku">' + esc(x.sku) + "</span></td>" +
           '<td class="n">' + kgCell(x.stockKg) + '</td><td class="n">' + (x.cons > 0 ? kg(x.cons) : DOT) + "</td>" +
           '<td class="n">' + (r.inA ? kg(r.inA) : DOT) + '</td><td class="n">' + (r.inC ? kg(r.inC) : DOT) + "</td>" +
@@ -1177,8 +1178,8 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
 
   // ---------- purchasing recommendations ----------
   var SWAP_STATE = {
-    open: { label: "סביר לשנות", c: "var(--good)" },
-    check: { label: "לבדוק מיד, ייתכן שכבר הועמס", c: "var(--warn)" },
+    open: { label: "ניתן לשנות", c: "var(--good)" },
+    locked: { label: "נעולה, עבר חודש מההזמנה", c: "var(--dead)" },
     shipped: { label: "כבר באוניה", c: "var(--dead)" },
   };
   function total(list, f) { return list.reduce(function (s, x) { return s + f(x); }, 0); }
@@ -1190,8 +1191,11 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
   }
   function swapCard(p) {
     var st = SWAP_STATE[p.state];
+    var daysLeft = p.changeUntil ? Math.round((Date.parse(p.changeUntil) - Date.parse(state.d.refDate)) / 86400000) : null;
+    var label = p.state === "open" ? "ניתן לשנות עד " + dmy(p.changeUntil) + (daysLeft !== null ? " (" + daysLeft + " ימים)" : "") : st.label;
+    var c = p.state === "open" && daysLeft !== null && daysLeft <= 7 ? "var(--crit)" : st.c;
     return '<div class="swap"><div class="swap-h"><span class="sku">' + esc(p.po) + "</span><b>" + esc(p.supplier) + '</b><span class="pill outline">' + esc(p.status) + "</span>" +
-      "<span>הגעה צפויה " + dmy(p.eta) + '</span><span class="pill" style="--c:' + st.c + '">' + st.label + "</span><span><b>" + tons(p.kg) + " ט׳</b> · " + money(p.usd, "$") + "</span></div>" +
+      "<span>הוזמנה " + dmy(p.orderDate) + " · הגעה צפויה " + dmy(p.eta) + '</span><span class="pill" style="--c:' + c + '">' + label + "</span><span><b>" + tons(p.kg) + " ט׳</b> · " + money(p.usd, "$") + "</span></div>" +
       '<div class="swap-cols"><div><h4>להקטין או לבטל</h4><ul>' + p.lines.map(function (l) {
         return '<li><span><span class="sku">' + esc(l.sku) + "</span> <bdi>" + esc(l.desc) + '</bdi></span><span class="n">' + tons(l.kg) + " ט׳ · " +
           (l.cons > 0 ? months(l.coverage) + " חודשי מלאי" : "בלי צריכה") + "</span></li>";
@@ -1206,14 +1210,14 @@ input.qty.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
     var mats = MAT_ORDER.filter(function (m) { return state.params[m] && (state.material === "all" || state.material === m); });
     var arrivalTxt = mats.map(function (m) { return MAT[m] + " " + monthLabel(state.params[m].arrival); }).join(", ");
 
-    var swappable = R.swaps.filter(function (p) { return p.state !== "shipped"; });
-    var shipped = R.swaps.filter(function (p) { return p.state === "shipped"; });
+    var swappable = R.swaps.filter(function (p) { return p.state === "open"; });
+    var closed = R.swaps.filter(function (p) { return p.state !== "open"; });
     if (swappable.length) {
       steps.push({
-        t: "להמיר הזמנות שעוד לא הועמסו",
-        p: "<b>" + tons(total(swappable, function (p) { return p.kg; })) + " ט׳</b> (" + money(total(swappable, function (p) { return p.usd; }), "$") + ") ב־" + swappable.length +
-          " הזמנות שלא רשומה להן אוניה הם במידות עם יותר משנת מלאי, או בלי צריכה בכלל. המרה למידות החסרות אצל אותו ספק מכסה חלק מהחוסר בלי התחייבות כספית נוספת, ומגיעה לפני יבוא חדש. אחרי אישור הספק, להוריד את אותן כמויות מטבלת ההזמנה למטה.",
-        body: swappable.map(swapCard).join("") + (shipped.length ? '<p class="summary muted">כבר באוניה, לא ניתן לשנות: ' + shipped.map(function (p) { return esc(p.po) + " (" + tons(p.kg) + " ט׳)"; }).join(", ") + ".</p>" : ""),
+        t: "להמיר הזמנות שעוד אפשר לשנות",
+        p: "הזמנה אפשר לשנות רק בחודש הראשון אחרי שבוצעה. <b>" + tons(total(swappable, function (p) { return p.kg; })) + " ט׳</b> (" + money(total(swappable, function (p) { return p.usd; }), "$") + ") ב־" + swappable.length +
+          " הזמנות שעדיין בחלון הזה הם במידות עם יותר משנת מלאי, או בלי צריכה בכלל. המרה למידות החסרות אצל אותו ספק מכסה חלק מהחוסר בלי התחייבות כספית נוספת. הדחופה ראשונה. אחרי אישור הספק, להוריד את אותן כמויות מטבלת ההזמנה למטה.",
+        body: swappable.map(swapCard).join("") + (closed.length ? '<p class="summary muted">נעולות, לא ניתן לשנות: ' + closed.map(function (p) { return esc(p.po) + " (" + tons(p.kg) + " ט׳, " + (p.state === "shipped" ? "באוניה" : "הוזמנה " + dmy(p.orderDate)) + ")"; }).join(", ") + ".</p>" : ""),
       });
     }
 
