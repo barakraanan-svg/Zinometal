@@ -295,6 +295,9 @@
   }
 
   var DEFAULT_LEAD = 4;
+  // Business rule: imports take five months from order to arrival, black and galvanized alike.
+  // The medians measured from open orders are still reported, for comparison.
+  var DEFAULT_LEAD_MONTHS = 5;
   // Warehouses that never count as stock: 99 is not ours, 10 holds inquiries / non-existent stock.
   var DEFAULT_EXCLUDED_WH = ["99", "10"];
 
@@ -307,10 +310,11 @@
       new Date().toISOString().slice(0, 10);
 
     var LT = leadTimes(snap.orders);
+    var fixedLead = opts.leadMonths > 0 ? opts.leadMonths : null;
     var leadFor = function (mat) {
-      return (LT.byMaterial[mat] && LT.byMaterial[mat].months) || LT.all || DEFAULT_LEAD;
+      return fixedLead || (LT.byMaterial[mat] && LT.byMaterial[mat].months) || LT.all || DEFAULT_LEAD;
     };
-    var leadTime = material === "all" ? (LT.all || DEFAULT_LEAD) : leadFor(material);
+    var leadTime = fixedLead || (material === "all" ? (LT.all || DEFAULT_LEAD) : leadFor(material));
 
     var keep = function (mat) { return material === "all" || mat === material; };
     var byS = {};
@@ -547,7 +551,8 @@
 
     return {
       refDate: refDate, material: material, meta: snap.meta,
-      leadTime: leadTime, leadTimes: LT.list, leadByMaterial: LT.byMaterial,
+      leadTime: leadTime, leadFixed: !!fixedLead, leadTimes: LT.list, leadByMaterial: LT.byMaterial,
+      leadMeasured: LT.all,
       overstockMonths: OVERSTOCK_MONTHS,
       totals: T, quality: quality, items: items, profiles: profiles, visible: visible,
       families: families, materials: materials, buckets: buckets, arrivals: arrivals,
@@ -588,7 +593,7 @@
     var ref = d.refDate.slice(0, 7);
     var params = {};
     ["BLA", "MEG"].forEach(function (m) {
-      var lead = (d.leadByMaterial[m] && d.leadByMaterial[m].months) || d.leadTime;
+      var lead = d.leadFixed ? d.leadTime : (d.leadByMaterial[m] && d.leadByMaterial[m].months) || d.leadTime;
       var arrival = addMonths(ref, Math.max(1, Math.round(lead)));
       params[m] = { arrival: arrival, until: addMonths(arrival, 3), stepKg: 5000 };
     });
@@ -657,10 +662,101 @@
     return { params: params, groups: groups };
   }
 
+  // ---------- purchasing recommendations ----------
+  //
+  // Built on top of an import plan. In priority order:
+  //   swaps   - open foreign POs holding lines for profiles with over a year of stock, with the
+  //             shortage SKUs (same material and family as that supplier already sells) to convert into
+  //   local   - SKUs that run out before the import can land, earliest first
+  //   late    - open lines past their expected date
+  //   prices  - families bought from more than one supplier, cheapest first
+  //   dead    - profiles with stock and no consumption
+
+  var SWAP_SOON_MONTHS = 2;
+
+  function addDays(iso, days) {
+    return new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
+  }
+
+  function recommend(d, pl) {
+    var over = {};
+    d.actions.overOrdered.forEach(function (g) { over[g.key] = g; });
+    var sells = {};
+    d.lines.forEach(function (l) {
+      (sells[l.supplier] = sells[l.supplier] || {})[l.material + "|" + l.family] = true;
+    });
+    var short = [];
+    pl.groups.forEach(function (g) {
+      g.rows.forEach(function (r) { if (r.local > 0 || r.rec > 0) short.push(r); });
+    });
+
+    var poMap = {};
+    d.items.forEach(function (x) {
+      var g = over[x.profileKey];
+      if (!g) return;
+      x.lines.forEach(function (l) {
+        if (l.draft || l.kgOpen <= 0 || l.currency === 'ש"ח') return;
+        var p = poMap[l.po] || (poMap[l.po] = {
+          po: l.po, supplier: l.supplier, status: l.status, eta: l.eta, ship: l.ship,
+          monthsToEta: l.eta ? monthsBetween(d.refDate, l.eta) : null, kg: 0, usd: 0, lines: [],
+        });
+        p.kg += l.kgOpen; p.usd += l.openUsd;
+        p.lines.push({ sku: x.sku, desc: x.desc, kg: l.kgOpen, usd: l.openUsd, coverage: g.coverage, cons: g.cons });
+      });
+    });
+    var swaps = Object.keys(poMap).map(function (k) {
+      var p = poMap[k];
+      p.state = p.ship ? "shipped" : p.monthsToEta !== null && p.monthsToEta < SWAP_SOON_MONTHS ? "check" : "open";
+      var fam = sells[p.supplier] || {};
+      p.candidates = short.filter(function (r) { return fam[r.item.material + "|" + r.item.family]; })
+        .sort(function (a, b) { return (b.local + b.rec) - (a.local + a.rec); }).slice(0, 6);
+      p.lines.sort(function (a, b) { return b.kg - a.kg; });
+      return p;
+    }).sort(function (a, b) {
+      var rank = { open: 0, check: 1, shipped: 2 };
+      return rank[a.state] - rank[b.state] || b.kg - a.kg;
+    });
+
+    var local = short.filter(function (r) { return r.local > 0; }).map(function (r) {
+      var x = r.item;
+      var left = x.cons > 0 ? Math.max(x.stockKg, 0) / x.cons : null;
+      return { row: r, monthsLeft: left, runOut: left === null ? null : addDays(d.refDate, left * DAYS_PER_MONTH) };
+    }).sort(function (a, b) { return a.monthsLeft - b.monthsLeft || b.row.local - a.row.local; });
+
+    var lateMap = {};
+    d.quality.lateLines.forEach(function (l) {
+      var p = lateMap[l.po] || (lateMap[l.po] = { po: l.po, supplier: l.supplier, eta: l.eta, kg: 0, lines: 0 });
+      p.kg += l.kgOpen; p.lines++;
+    });
+    var late = Object.keys(lateMap).map(function (k) { return lateMap[k]; })
+      .sort(function (a, b) { return a.eta < b.eta ? -1 : 1; });
+
+    var pm = {};
+    d.lines.forEach(function (l) {
+      if (l.draft || l.currency !== "$" || l.kgOpen <= 0) return;
+      var k = l.material + "|" + l.family;
+      var f = pm[k] || (pm[k] = { material: l.material, family: l.family, sup: {} });
+      var s = f.sup[l.supplier] || (f.sup[l.supplier] = { supplier: l.supplier, kg: 0, usd: 0 });
+      s.kg += l.kgOpen; s.usd += l.openUsd;
+    });
+    var prices = Object.keys(pm).map(function (k) {
+      var f = pm[k];
+      f.suppliers = Object.keys(f.sup).map(function (s) {
+        var x = f.sup[s]; x.pricePerTon = x.usd / (x.kg / 1000); return x;
+      }).sort(function (a, b) { return a.pricePerTon - b.pricePerTon; });
+      delete f.sup;
+      f.spread = f.suppliers[f.suppliers.length - 1].pricePerTon - f.suppliers[0].pricePerTon;
+      return f;
+    }).filter(function (f) { return f.suppliers.length > 1; })
+      .sort(function (a, b) { return b.spread - a.spread; });
+
+    return { swaps: swaps, local: local, late: late, prices: prices, dead: d.actions.dead };
+  }
+
   var api = {
     decode: decode, parseTsv: parseTsv, detectKind: detectKind,
     extract: extract, compute: compute, isoDate: isoDate,
-    profileOf: profileOf, plan: plan, DEFAULT_EXCLUDED_WH: DEFAULT_EXCLUDED_WH, defaultPlanParams: defaultPlanParams, addMonths: addMonths,
+    profileOf: profileOf, plan: plan, recommend: recommend, DEFAULT_LEAD_MONTHS: DEFAULT_LEAD_MONTHS, DEFAULT_EXCLUDED_WH: DEFAULT_EXCLUDED_WH, defaultPlanParams: defaultPlanParams, addMonths: addMonths,
   };
   root.SteelModel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

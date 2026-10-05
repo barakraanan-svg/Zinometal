@@ -66,7 +66,7 @@ mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, html);
 
 if (snapshot) {
-  const d = model.compute(snapshot, { excludeWh: model.DEFAULT_EXCLUDED_WH });
+  const d = model.compute(snapshot, { excludeWh: model.DEFAULT_EXCLUDED_WH, leadMonths: model.DEFAULT_LEAD_MONTHS });
   const t = (kg) => `${(kg / 1000).toFixed(1)} t`;
   console.log(`stock run ${snapshot.meta.stockRun}: ${snapshot.parts.length} items, ` +
     `stock ${t(d.totals.stockKg)} (excl. warehouses ${d.totals.excludedWh.join(", ")}), monthly use ${t(d.totals.consKg)}, open orders ${t(d.totals.onOrderKg)}`);
