@@ -213,6 +213,36 @@
     return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
   }
 
+  // ---------- profiles: one size of one section, across its stock lengths ----------
+  //
+  // "UPN160" (6m) and "UPN160-12" (12m) are the same profile in two lengths.
+  // The length comes from the SKU suffix, else from the description; Chinese-origin
+  // variants ("...C", description "סיני") join the same profile.
+
+  var LENGTH_SUFFIX = /-(12\.1|12|6\.05|6|3)$/;
+  var DESC_LENGTH = /(^|\s)(12\.1|12|6\.05|6|3)\s*(m(?![a-z])|מ'|מטר|מ(?=\s|$)|מג)/i;
+
+  function profileOf(sku, desc, material) {
+    var base = sku, len = null;
+    var m = LENGTH_SUFFIX.exec(sku);
+    if (m) { len = +m[1]; base = sku.slice(0, m.index); }
+    if (len === null) {
+      var d = DESC_LENGTH.exec(desc);
+      if (d) len = +d[2];
+    }
+    var china = /סיני/.test(desc);
+    if (china && /C$/.test(base)) base = base.slice(0, -1);
+    var lengthM = len === null ? null : len >= 11 ? 12 : len >= 5.5 ? 6 : len;
+    // 6.05m is exactly half of 12.1m: those pieces are cut in-house, not imported.
+    var half = len === 6.05;
+    return { key: material + "|" + base, base: base, lengthM: lengthM, china: china, half: half };
+  }
+
+  function profileName(desc) {
+    return desc.replace(DESC_LENGTH, "$1").replace(/(^|\s)(ב?אורך|סיני)(?=\s|$)/g, " ")
+      .replace(/\s+/g, " ").trim();
+  }
+
   function bucketOf(x) {
     if (x.cons <= 0) return x.stockKg > 0.5 ? "dead" : "idle";
     if (x.stockKg <= 0.5) return "out";
@@ -223,21 +253,76 @@
     return "over";
   }
 
+  // Coverage, reorder and gap metrics; shared by single SKUs and whole profiles.
+  function derive(x, refDate, leadTime) {
+    x.leadTime = leadTime;
+    x.coverage = x.cons > 0 ? x.stockKg / x.cons : null;
+    x.pipeCoverage = x.cons > 0 ? (x.stockKg + x.onOrderKg) / x.cons : null;
+    x.avgCost = x.stockKg > 0.5 ? x.valueIls / x.stockKg : x.unitCost || null;
+    x.bucket = bucketOf(x);
+    x.monthsToEta = x.nextEta ? Math.max(0, monthsBetween(refDate, x.nextEta)) : null;
+    // Reorder point: stock + open orders won't last as long as a new import takes.
+    x.reorder = x.active && x.cons > 0 && x.pipeCoverage < leadTime;
+    x.coverNeedKg = x.reorder ? x.cons * leadTime - (x.stockKg + x.onOrderKg) : 0;
+    // Will run out before the next open order lands.
+    x.gapKg = 0;
+    if (x.cons > 0 && x.onOrderKg > 0 && x.monthsToEta !== null) {
+      var need = x.cons * x.monthsToEta;
+      if (Math.max(x.stockKg, 0) < need) x.gapKg = need - Math.max(x.stockKg, 0);
+    }
+    x.overOrdered = x.onOrderKg > 0 && (x.cons <= 0 || x.stockKg / x.cons > OVERSTOCK_MONTHS);
+    x.belowMin = x.active && x.minInv > 0 && x.stockKg < x.minInv;
+    return x;
+  }
+
+  // Median months from order date to expected arrival, per foreign-currency PO.
+  function leadTimes(orders) {
+    var po = {};
+    orders.forEach(function (l) {
+      if (l.status === DRAFT_STATUS || l.currency === 'ש"ח' || !l.orderDate || !l.eta) return;
+      var p = po[l.po] || (po[l.po] = { po: l.po, months: monthsBetween(l.orderDate, l.eta), materials: {} });
+      p.materials[l.material] = true;
+    });
+    var list = Object.keys(po).map(function (k) { return po[k]; });
+    var byMaterial = {};
+    ["BLA", "MEG", "GAL"].forEach(function (m) {
+      var xs = list.filter(function (p) { return p.materials[m]; }).map(function (p) { return p.months; });
+      if (xs.length) byMaterial[m] = { months: median(xs), count: xs.length };
+    });
+    return {
+      all: median(list.map(function (p) { return p.months; })), list: list, byMaterial: byMaterial,
+    };
+  }
+
+  var DEFAULT_LEAD = 4;
+  // Warehouses that never count as stock: 99 is not ours, 10 holds inquiries / non-existent stock.
+  var DEFAULT_EXCLUDED_WH = ["99", "10"];
+
   function compute(snap, opts) {
     opts = opts || {};
     var material = opts.material || "all";
+    var excluded = {};
+    (opts.excludeWh || []).forEach(function (w) { excluded[w] = true; });
     var refDate = isoDate(snap.meta.stockRun) || isoDate(snap.meta.ordersRun) ||
       new Date().toISOString().slice(0, 10);
+
+    var LT = leadTimes(snap.orders);
+    var leadFor = function (mat) {
+      return (LT.byMaterial[mat] && LT.byMaterial[mat].months) || LT.all || DEFAULT_LEAD;
+    };
+    var leadTime = material === "all" ? (LT.all || DEFAULT_LEAD) : leadFor(material);
 
     var keep = function (mat) { return material === "all" || mat === material; };
     var byS = {};
     var items = [];
     snap.parts.forEach(function (p) {
       if (!keep(p.material)) return;
+      var pf = profileOf(p.sku, p.desc, p.material);
       var x = {
         sku: p.sku, desc: p.desc, active: p.active, family: p.family, material: p.material,
         kgm: p.kgm, minInv: p.minInv, cons: p.cons, basePrice: p.basePrice,
         priceList: p.priceList || p.basePrice, unitCost: p.unitCost || p.costIls,
+        profileKey: pf.key, base: pf.base, lengthM: pf.lengthM, china: pf.china, half: pf.half,
         stockKg: 0, valueIls: 0, negBins: 0, onOrderKg: 0, onOrderUsd: 0, draftKg: 0, lateKg: 0,
         nextEta: null, lines: [],
       };
@@ -245,7 +330,7 @@
       items.push(x);
     });
 
-    // Stock
+    // Stock (excluded warehouses are reported, never counted)
     var warehouses = {};
     var negativeBins = [];
     var unlocatedKg = 0;
@@ -253,11 +338,12 @@
     snap.stock.forEach(function (r) {
       var x = byS[r.sku];
       if (!x) return;
-      x.stockKg += r.qty;
-      x.valueIls += r.value;
-      var w = warehouses[r.wh] || (warehouses[r.wh] = { wh: r.wh, kg: 0, value: 0 });
+      var w = warehouses[r.wh] || (warehouses[r.wh] = { wh: r.wh, kg: 0, value: 0, excluded: !!excluded[r.wh] });
       w.kg += r.qty;
       w.value += r.value;
+      if (excluded[r.wh]) return;
+      x.stockKg += r.qty;
+      x.valueIls += r.value;
       if (r.qty < -0.5) {
         x.negBins++;
         negativeBins.push({ sku: r.sku, desc: x.desc, wh: r.wh, loc: r.loc, kg: r.qty });
@@ -285,40 +371,41 @@
       if (o.eta && (!x.nextEta || o.eta < x.nextEta)) x.nextEta = o.eta;
     });
 
-    // Import lead time: order date -> expected arrival, per foreign-currency PO
-    var poLead = {};
-    lines.forEach(function (l) {
-      if (l.draft || l.currency === 'ש"ח' || !l.orderDate || !l.eta) return;
-      poLead[l.po] = monthsBetween(l.orderDate, l.eta);
-    });
-    var leadTime = median(Object.keys(poLead).map(function (k) { return poLead[k]; })) || 4;
+    items.forEach(function (x) { derive(x, refDate, leadFor(x.material)); });
 
-    // Per-item derived metrics
+    // Profiles: each length stays visible inside its profile
+    var profMap = {};
     items.forEach(function (x) {
-      x.coverage = x.cons > 0 ? x.stockKg / x.cons : null;
-      x.pipeCoverage = x.cons > 0 ? (x.stockKg + x.onOrderKg) / x.cons : null;
-      x.avgCost = x.stockKg > 0.5 ? x.valueIls / x.stockKg : x.unitCost;
-      x.bucket = bucketOf(x);
-      x.monthsToEta = x.nextEta ? Math.max(0, monthsBetween(refDate, x.nextEta)) : null;
-      // Reorder point: stock + open orders won't last as long as a new import takes.
-      x.reorder = x.cons > 0 && x.pipeCoverage < leadTime;
-      x.coverNeedKg = x.reorder ? x.cons * leadTime - (x.stockKg + x.onOrderKg) : 0;
-      // Will run out before the next open order lands.
-      x.gapKg = 0;
-      if (x.cons > 0 && x.onOrderKg > 0 && x.monthsToEta !== null) {
-        var need = x.cons * x.monthsToEta;
-        if (Math.max(x.stockKg, 0) < need) x.gapKg = need - Math.max(x.stockKg, 0);
-      }
-      x.overOrdered = x.onOrderKg > 0 && (x.cons <= 0 || x.stockKg / x.cons > OVERSTOCK_MONTHS);
-      x.belowMin = x.active && x.minInv > 0 && x.stockKg < x.minInv;
+      var g = profMap[x.profileKey] || (profMap[x.profileKey] = {
+        key: x.profileKey, base: x.base, family: x.family, material: x.material, active: false,
+        lengths: [], stockKg: 0, valueIls: 0, cons: 0, onOrderKg: 0, onOrderUsd: 0, draftKg: 0,
+        lateKg: 0, nextEta: null, minInv: 0, unitCost: 0, priceList: 0,
+      });
+      g.lengths.push(x);
+      g.active = g.active || x.active;
+      g.stockKg += x.stockKg; g.valueIls += x.valueIls; g.cons += Math.max(x.cons, 0);
+      g.onOrderKg += x.onOrderKg; g.onOrderUsd += x.onOrderUsd; g.draftKg += x.draftKg;
+      g.lateKg += x.lateKg; g.minInv += x.minInv;
+      if (x.nextEta && (!g.nextEta || x.nextEta < g.nextEta)) g.nextEta = x.nextEta;
     });
-
-    var visible = items.filter(function (x) { return x.bucket !== "idle" || x.onOrderKg > 0; });
+    var profiles = Object.keys(profMap).map(function (k) {
+      var g = profMap[k];
+      g.lengths.sort(function (a, b) {
+        return (b.lengthM || 6) - (a.lengthM || 6) || (a.china ? 1 : 0) - (b.china ? 1 : 0) || (a.sku < b.sku ? -1 : 1);
+      });
+      g.name = profileName(g.lengths[0].desc) || g.base;
+      g.unitCost = g.lengths[0].unitCost;
+      return derive(g, refDate, leadFor(g.material));
+    });
+    var visible = profiles.filter(function (g) { return g.bucket !== "idle" || g.onOrderKg > 0; });
 
     // Totals
-    var T = { stockKg: 0, valueIls: 0, consKg: 0, onOrderKg: 0, draftKg: 0, lateKg: 0, onOrderUsd: 0, draftUsd: 0 };
+    var T = { stockKg: 0, valueIls: 0, consKg: 0, onOrderKg: 0, draftKg: 0, lateKg: 0, onOrderUsd: 0, draftUsd: 0, excludedKg: 0, excludedWh: [] };
     items.forEach(function (x) {
       T.stockKg += x.stockKg; T.valueIls += x.valueIls; T.consKg += Math.max(x.cons, 0);
+    });
+    Object.keys(warehouses).forEach(function (k) {
+      if (warehouses[k].excluded) { T.excludedKg += warehouses[k].kg; T.excludedWh.push(k); }
     });
     lines.forEach(function (l) {
       if (l.kgOpen <= 0) return;
@@ -334,21 +421,21 @@
     var famMap = {};
     items.forEach(function (x) {
       var f = famMap[x.family] || (famMap[x.family] = {
-        family: x.family, skus: 0, stockKg: 0, valueIls: 0, consKg: 0, onOrderKg: 0,
-        listValue: 0, costValue: 0, critical: 0, over: 0, byMaterial: {},
+        family: x.family, skus: 0, profiles: {}, stockKg: 0, valueIls: 0, consKg: 0, onOrderKg: 0,
+        listValue: 0, costValue: 0, byMaterial: {},
       });
-      if (x.bucket !== "idle" || x.onOrderKg > 0) f.skus++;
+      if (x.bucket !== "idle" || x.onOrderKg > 0) { f.skus++; f.profiles[x.profileKey] = true; }
       f.stockKg += x.stockKg; f.valueIls += x.valueIls; f.consKg += Math.max(x.cons, 0);
       f.onOrderKg += x.onOrderKg;
       f.byMaterial[x.material] = (f.byMaterial[x.material] || 0) + x.stockKg;
       if (x.stockKg > 0 && x.priceList > 0 && x.avgCost > 0) {
         f.listValue += x.stockKg * x.priceList; f.costValue += x.stockKg * x.avgCost;
       }
-      if (x.bucket === "out" || x.bucket === "critical") f.critical++;
-      if (x.bucket === "over" || x.bucket === "dead") f.over++;
     });
     var families = Object.keys(famMap).map(function (k) {
       var f = famMap[k];
+      f.profileCount = Object.keys(f.profiles).length;
+      delete f.profiles;
       f.coverage = f.consKg > 0 ? f.stockKg / f.consKg : null;
       f.pipeCoverage = f.consKg > 0 ? (f.stockKg + f.onOrderKg) / f.consKg : null;
       f.listMargin = f.listValue > 0 ? 1 - f.costValue / f.listValue : null;
@@ -365,15 +452,13 @@
     var materials = Object.keys(matMap).map(function (k) { return matMap[k]; })
       .filter(function (m) { return m.stockKg > 0.5 || m.onOrderKg > 0; });
 
-    // Coverage buckets
-    var bucketOrder = ["out", "critical", "low", "ok", "over", "dead"];
-    var buckets = bucketOrder.map(function (b) {
-      var xs = items.filter(function (x) { return x.bucket === b; });
+    // Coverage buckets, per profile
+    var buckets = ["out", "critical", "low", "ok", "over", "dead"].map(function (b) {
+      var xs = profiles.filter(function (x) { return x.bucket === b; });
       return {
-        bucket: b, skus: xs.length,
+        bucket: b, count: xs.length,
         stockKg: xs.reduce(function (s, x) { return s + Math.max(x.stockKg, 0); }, 0),
         valueIls: xs.reduce(function (s, x) { return s + Math.max(x.valueIls, 0); }, 0),
-        consKg: xs.reduce(function (s, x) { return s + x.cons; }, 0),
       };
     });
 
@@ -410,7 +495,6 @@
       var p = poMap[k];
       p.materials = Object.keys(p.materials);
       p.pricePerTon = p.kgOpen > 0 ? p.usd / (p.kgOpen / 1000) : null;
-      p.lead = p.orderDate && p.eta ? monthsBetween(p.orderDate, p.eta) : null;
       return p;
     }).filter(function (p) { return p.kgOpen > 0; })
       .sort(function (a, b) { return (a.eta || "9") < (b.eta || "9") ? -1 : 1; });
@@ -435,10 +519,14 @@
       var s = supMap[k];
       s.poCount = Object.keys(s.pos).length; delete s.pos;
       s.pricePerTon = s.kgOpen > 0 ? s.usd / (s.kgOpen / 1000) : null;
+      Object.keys(s.byMaterial).forEach(function (m) {
+        var b = s.byMaterial[m];
+        b.pricePerTon = b.kg > 0 ? b.usd / (b.kg / 1000) : null;
+      });
       return s;
     }).sort(function (a, b) { return (b.kgOpen + b.draftKg) - (a.kgOpen + a.draftKg); });
 
-    // Data quality
+    // Data quality (per SKU: that is where Priority needs fixing)
     var minCounts = {};
     items.forEach(function (x) { if (x.active) minCounts[x.minInv] = (minCounts[x.minInv] || 0) + 1; });
     var activeCount = items.filter(function (x) { return x.active; }).length;
@@ -458,29 +546,121 @@
     };
 
     return {
-      refDate: refDate, material: material, meta: snap.meta, leadTime: leadTime,
-      leadTimes: Object.keys(poLead).map(function (k) { return { po: k, months: poLead[k] }; }),
+      refDate: refDate, material: material, meta: snap.meta,
+      leadTime: leadTime, leadTimes: LT.list, leadByMaterial: LT.byMaterial,
       overstockMonths: OVERSTOCK_MONTHS,
-      totals: T, quality: quality, items: items, visible: visible, families: families, materials: materials,
-      buckets: buckets, arrivals: arrivals, pos: pos, lines: lines, suppliers: suppliers,
+      totals: T, quality: quality, items: items, profiles: profiles, visible: visible,
+      families: families, materials: materials, buckets: buckets, arrivals: arrivals,
+      pos: pos, lines: lines, suppliers: suppliers,
       warehouses: Object.keys(warehouses).map(function (k) { return warehouses[k]; })
         .sort(function (a, b) { return b.kg - a.kg; }),
       actions: {
-        reorder: items.filter(function (x) { return x.reorder && x.active; })
+        reorder: profiles.filter(function (x) { return x.reorder; })
           .sort(function (a, b) { return b.cons - a.cons; }),
-        gap: items.filter(function (x) { return x.gapKg > 0; })
+        gap: profiles.filter(function (x) { return x.gapKg > 0; })
           .sort(function (a, b) { return b.gapKg - a.gapKg; }),
-        overOrdered: items.filter(function (x) { return x.overOrdered; })
+        overOrdered: profiles.filter(function (x) { return x.overOrdered; })
           .sort(function (a, b) { return b.onOrderKg - a.onOrderKg; }),
-        dead: items.filter(function (x) { return x.bucket === "dead"; })
+        dead: profiles.filter(function (x) { return x.bucket === "dead"; })
           .sort(function (a, b) { return b.valueIls - a.valueIls; }),
       },
     };
   }
 
+  // ---------- import plan ----------
+  //
+  // For each material the buyer picks the month the new order should arrive and the month
+  // it has to last until. Per SKU, longest length first within its profile:
+  //   at arrival  = stock + open orders due by then - consumption until then
+  //   local       = what runs out before the import can land (bridge it locally)
+  //   import need = consumption from arrival to "until" - stock at arrival - orders due in between
+  // Surplus of a longer length passes down to the shorter ones (12m can be cut to 6m, not back).
+  // A 6.05m need is added to its 12.1m sibling: 6.05m is cut from 12.1m, never imported.
+  // Needs are rounded up to the order step; needs under half a step are flagged, not ordered.
+
+  function addMonths(ym, n) {
+    var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    return y + "-" + pad(m + 1);
+  }
+
+  function defaultPlanParams(d) {
+    var ref = d.refDate.slice(0, 7);
+    var params = {};
+    ["BLA", "MEG"].forEach(function (m) {
+      var lead = (d.leadByMaterial[m] && d.leadByMaterial[m].months) || d.leadTime;
+      var arrival = addMonths(ref, Math.max(1, Math.round(lead)));
+      params[m] = { arrival: arrival, until: addMonths(arrival, 3), stepKg: 5000 };
+    });
+    return params;
+  }
+
+  function plan(d, params) {
+    // Recent dollar prices: per SKU, else per family and material
+    var famPrice = {};
+    d.lines.forEach(function (l) {
+      if (l.draft || l.currency !== "$" || l.kgOpen <= 0) return;
+      var k = l.family + "|" + l.material;
+      var f = famPrice[k] || (famPrice[k] = { kg: 0, usd: 0 });
+      f.kg += l.kgOpen; f.usd += l.openUsd;
+    });
+    var groups = [];
+    d.profiles.forEach(function (g) {
+      var P = params[g.material];
+      if (!P || !g.active) return;
+      var A = P.arrival + "-15", C = P.until + "-15";
+      var toA = Math.max(0, monthsBetween(d.refDate, A));
+      var span = Math.max(0, monthsBetween(A, C));
+      var carryA = 0, carryC = 0;
+      var rows = g.lengths.map(function (x) {
+        var inA = 0, inC = 0, priceKg = 0, priceUsd = 0, lastSupplier = null, lastDate = "";
+        x.lines.forEach(function (l) {
+          if (l.draft || l.kgOpen <= 0) return;
+          if (!l.eta || l.eta <= A) inA += l.kgOpen; else if (l.eta <= C) inC += l.kgOpen;
+          if (l.currency === "$") { priceKg += l.kgOpen; priceUsd += l.openUsd; }
+          if ((l.orderDate || "") >= lastDate) { lastDate = l.orderDate || ""; lastSupplier = l.supplier; }
+        });
+        var cons = Math.max(x.cons, 0);
+        var supplyA = x.stockKg + inA + carryA;
+        var local = x.active ? Math.max(0, cons * toA - supplyA) : 0;
+        var atA = Math.max(0, supplyA - cons * toA);
+        var supplyC = atA + inC + carryC;
+        var need = x.active ? Math.max(0, cons * span - supplyC) : 0;
+        var surplus = Math.max(0, supplyC - cons * span);
+        carryA = Math.min(surplus, atA);
+        carryC = surplus - carryA;
+        var fp = famPrice[x.family + "|" + x.material];
+        var price = priceKg > 0 ? priceUsd / (priceKg / 1000) : fp && fp.kg > 0 ? fp.usd / (fp.kg / 1000) : null;
+        return {
+          item: x, inA: inA, inC: inC, atA: atA, local: local, need: need, cutKg: 0, cutTo: null,
+          price: price, priceFromSku: priceKg > 0, lastSupplier: lastSupplier,
+        };
+      });
+      var long = rows.filter(function (r) { return r.item.lengthM === 12 && !r.item.china && r.item.active; })[0];
+      rows.forEach(function (r) {
+        if (r.item.half && long && r.need > 0) {
+          long.need += r.need; r.cutKg = r.need; r.cutTo = long.item.sku; r.need = 0;
+        }
+      });
+      rows.forEach(function (r) {
+        r.rec = r.need >= P.stepKg / 2 ? Math.ceil(r.need / P.stepKg) * P.stepKg : 0;
+        r.small = r.need > 0 && r.rec === 0;
+      });
+      var sum = function (f) { return rows.reduce(function (s, r) { return s + f(r); }, 0); };
+      groups.push({
+        profile: g, rows: rows, toA: toA, span: span,
+        need: sum(function (r) { return r.need; }), rec: sum(function (r) { return r.rec; }),
+        local: sum(function (r) { return r.local; }),
+      });
+    });
+    groups.sort(function (a, b) { return b.rec - a.rec || b.need - a.need || b.profile.cons - a.profile.cons; });
+    return { params: params, groups: groups };
+  }
+
   var api = {
     decode: decode, parseTsv: parseTsv, detectKind: detectKind,
     extract: extract, compute: compute, isoDate: isoDate,
+    profileOf: profileOf, plan: plan, DEFAULT_EXCLUDED_WH: DEFAULT_EXCLUDED_WH, defaultPlanParams: defaultPlanParams, addMonths: addMonths,
   };
   root.SteelModel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
