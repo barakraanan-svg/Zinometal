@@ -18,3 +18,5 @@ steel-dashboard/dist/
 steel-dashboard/data/
 *.xls
 *.xlsx
+__pycache__/
+*.pyc
